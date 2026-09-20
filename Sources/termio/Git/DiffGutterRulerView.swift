@@ -1,6 +1,23 @@
 import TermioShared
 import AppKit
 
+/// The gutter geometry two split panes have to agree on. Inline, the ruler derives all of it
+/// from the document; side by side it cannot — a pure-addition file gives the left pane no old
+/// numbers at all, and a side-left to itself would collapse its column and start its code a
+/// column-width to the left of its neighbour's, so the two code columns would not line up.
+/// Handing both panes the same digits and the same single column keeps them identical.
+struct DiffGutterMetrics: Equatable {
+    /// Digits reserved for a line number, shared so both gutters are the same width.
+    let digits: Int
+    let showsOldColumn: Bool
+    let showsNewColumn: Bool
+
+    /// The metrics of one side of a split pair: that side's own column, the shared width.
+    static func side(_ isLeft: Bool, digits: Int) -> DiffGutterMetrics {
+        DiffGutterMetrics(digits: digits, showsOldColumn: isLeft, showsNewColumn: !isLeft)
+    }
+}
+
 /// The diff's gutter, following `LineNumberRulerView`'s ruler precedent (including its
 /// hard-won full-redraw-on-scroll invalidation, wired up by the pane's coordinator): old
 /// and new line-number columns, the `+`/`−` sign, and — on a collapsed band — the reveal
@@ -14,6 +31,9 @@ import AppKit
 final class DiffGutterRulerView: NSRulerView {
     /// Reveals part of a collapsed run — the buttons are the ruler's only controls.
     var onExpand: ((Int, DiffBandDirection) -> Void)?
+    /// Geometry the owning pane fixes (split panes), or nil to derive it from the document
+    /// (the inline pane, where there is nothing to line up with).
+    var metrics: DiffGutterMetrics?
 
     private var document: DiffDocument?
     private var numberFont: NSFont = .monospacedDigitSystemFont(ofSize: 10, weight: .regular)
@@ -58,10 +78,11 @@ final class DiffGutterRulerView: NSRulerView {
     required init(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     func configure(document: DiffDocument, codeFont: NSFont, gutterColor: NSColor,
-                   numberColor: NSColor) {
+                   numberColor: NSColor, metrics: DiffGutterMetrics? = nil) {
         self.document = document
         self.gutterColor = gutterColor
         self.numberColor = numberColor
+        self.metrics = metrics
         restyle(codeFont: codeFont)
     }
 
@@ -73,11 +94,15 @@ final class DiffGutterRulerView: NSRulerView {
         // Digits stay in the shared muted ink on every row — the cell behind them carries
         // the add/delete signal, and the sign column names it outright.
         numberAttributes = [.font: numberFont, .foregroundColor: numberColor]
-        let digits = max(2, String(max(document?.maxLineNumber ?? 0, 1)).count)
+        let digits = metrics?.digits ?? max(2, String(max(document?.maxLineNumber ?? 0, 1)).count)
         let digitWidth = ("8" as NSString).size(withAttributes: [.font: numberFont]).width
         let columnWidth = (digitWidth * CGFloat(digits)).rounded(.up)
-        oldColumnWidth = document?.hasOldGutter == false ? 0 : columnWidth
-        newColumnWidth = document?.hasNewGutter == false ? 0 : columnWidth
+        // A pane with no document at all still draws its columns (the inline ruler's
+        // original behaviour: the document arrives a beat later).
+        let showsOld = metrics.map(\.showsOldColumn) ?? (document?.hasOldGutter != false)
+        let showsNew = metrics.map(\.showsNewColumn) ?? (document?.hasNewGutter != false)
+        oldColumnWidth = showsOld ? columnWidth : 0
+        newColumnWidth = showsNew ? columnWidth : 0
         var thickness = Self.leadingPad + Self.signWidth + Self.trailingPad
         if oldColumnWidth > 0 { thickness += oldColumnWidth + Self.columnGap }
         if newColumnWidth > 0 { thickness += newColumnWidth + Self.columnGap }

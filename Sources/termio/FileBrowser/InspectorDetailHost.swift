@@ -314,7 +314,7 @@ struct InspectorDetailChromeButtons: View {
 /// read as one family with the refresh / filter / ↗ buttons in the same header — a 22×22 Hugeicons
 /// glyph, quiet `.secondary` at rest and brightening to primary over a faint rounded fill on hover.
 /// `size` varies per glyph so each sits at the same optical weight (the diagonal-heavy ✕ shrinks).
-private struct DetailChromeButton: View {
+struct DetailChromeButton: View {
     let icon: HugeIcon
     var size: CGFloat = 14
     let help: String

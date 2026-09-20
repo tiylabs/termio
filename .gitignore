@@ -15,6 +15,9 @@ termio-dev.app/
 # Wrangler local state (caches the Cloudflare account id/email); not project source.
 .wrangler/
 
+# Local state from the pi agent harness (goal/task snapshots); not project source.
+/.pi/
+
 packaging/.cache/
 /termio.app/
 sandbox-helper/.build/

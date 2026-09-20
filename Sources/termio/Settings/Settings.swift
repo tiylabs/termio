@@ -97,6 +97,7 @@ final class AppSettings: ObservableObject {
         Key.notifyTaskCompletion, Key.notificationSound,
         Key.analyticsEnabled,
         Key.projectSortOrder, Key.defaultChatAgent, Key.dimIgnoredFiles,
+        Key.diffSplitView,
     ]
 
     private enum Key {
@@ -149,6 +150,7 @@ final class AppSettings: ObservableObject {
         static let notificationSound = "notifications.sound"
         static let analyticsEnabled = "privacy.analyticsEnabled"
         static let dimIgnoredFiles = "files.dimIgnoredFiles"
+        static let diffSplitView = "diff.splitView"
         static let projectSortOrder = "sidebar.projectSortOrder"
         static let recentProjects = "welcome.recentProjects"
         static let lastChatAgent = "chats.lastAgent"
@@ -169,6 +171,14 @@ final class AppSettings: ObservableObject {
 
     @Published var dimIgnoredFiles: Bool {
         didSet { store.set(dimIgnoredFiles, forKey: Key.dimIgnoredFiles) }
+    }
+
+    /// Whether a maximized diff shows its two columns side by side. A preference rather than
+    /// per-diff state: the shape a reader wants a diff in is a habit, so it follows them from
+    /// file to file and across launches. Only a maximized diff can honor it — a diff docked in
+    /// the inspector has no width to split.
+    @Published var diffSplitView: Bool {
+        didSet { store.set(diffSplitView, forKey: Key.diffSplitView) }
     }
 
     /// Terminal font family. Defaults to "SF Mono" (the Apple system monospace,
@@ -583,6 +593,7 @@ final class AppSettings: ObservableObject {
             Key.backgroundBlur: 0,
             Key.scrollbackMegabytes: 10,
             Key.dimIgnoredFiles: true,
+            Key.diffSplitView: false,
             Key.copyOnSelect: false,
             Key.interfaceFontFamily: "",
             Key.interfaceFontSize: 13.0,
@@ -619,6 +630,7 @@ final class AppSettings: ObservableObject {
         defaults.register(defaults: registered)
 
         dimIgnoredFiles = store.bool(Key.dimIgnoredFiles)
+        diffSplitView = store.bool(Key.diffSplitView)
         fontFamily = store.string(Key.fontFamily) ?? ""
         fontSize = store.double(Key.fontSize)
         fontThicken = store.bool(Key.fontThicken)

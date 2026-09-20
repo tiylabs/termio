@@ -12,7 +12,7 @@ final class DiffDocument {
     /// One paragraph of the document — a code line, or a collapsed band standing in
     /// for a run of unchanged lines.
     struct Line {
-        enum Role {
+        enum Role: Equatable {
             case code(DiffRow.Kind)
             /// A band's `controls` are the reveal buttons the gutter offers for it. Empty
             /// means the band is inert: the default-context fallback, where the hidden
@@ -89,7 +89,8 @@ final class DiffDocument {
     /// per-paragraph metadata. `allRows` sizes the gutter columns (which sides carry
     /// numbers, and the widest).
     private static func build(items: [DisplayItem], allRows: [DiffRow], palette: DiffPalette,
-                              codeFont: NSFont, lineSpacing: CGFloat) -> DiffDocument {
+                              codeFont: NSFont, lineSpacing: CGFloat,
+                              lineNumberCeiling: Int? = nil) -> DiffDocument {
         var text = String()
         text.reserveCapacity(items.reduce(0) { $0 + $1.textLength + 1 })
         var lines: [Line] = []
@@ -140,7 +141,7 @@ final class DiffDocument {
             palette: palette,
             hasOldGutter: allRows.contains { $0.kind != .hunk && $0.oldLine != nil },
             hasNewGutter: allRows.contains { $0.kind != .hunk && $0.newLine != nil },
-            maxLineNumber: maxLineNumber
+            maxLineNumber: max(maxLineNumber, lineNumberCeiling ?? 0)
         )
     }
 
@@ -236,17 +237,108 @@ final class DiffDocument {
     /// section heading rides along when the gap came from a hunk boundary.
     private static func displayItems(rows: [DiffRow], expansion: DiffExpansion,
                                      gapText: DiffGapText) -> [DisplayItem] {
-        DiffParser.displayItems(lines: rows, expansion: expansion, gapText: gapText).map { item in
-            switch item {
-            case .line(let row):
-                return .line(row)
-            case .band(let id, let lines, let controls, let heading):
-                let range = lines.lowerBound == lines.upperBound
-                    ? "\(lines.lowerBound)"
-                    : "\(lines.lowerBound)–\(lines.upperBound)"
-                let label = heading.map { "\(range)   \($0)" } ?? range
-                return .band(id: id, label: label, controls: controls)
-            }
+        DiffParser.displayItems(lines: rows, expansion: expansion, gapText: gapText)
+            .map(displayItem)
+    }
+
+    /// One folded element as a paragraph. Split rendering maps the same elements through
+    /// here per side, so a band reads identically in both columns.
+    private static func displayItem(_ item: DiffItem) -> DisplayItem {
+        switch item {
+        case .line(let row):
+            return .line(row)
+        case .band(let id, let lines, let controls, let heading):
+            let range = lines.lowerBound == lines.upperBound
+                ? "\(lines.lowerBound)"
+                : "\(lines.lowerBound)–\(lines.upperBound)"
+            let label = heading.map { "\(range)   \($0)" } ?? range
+            return .band(id: id, label: label, controls: controls)
         }
+    }
+
+    // MARK: Split (two-column) documents
+
+    /// Which column a split document renders.
+    enum Side: Sendable { case left, right }
+
+    /// The pair of documents behind a split diff, plus the line-number width both gutters
+    /// must share. Each side carries only its own line numbers — the old side the old
+    /// numbers, the new side the new — so a column is numbered by the file it shows rather
+    /// than by the pair.
+    struct SplitPair {
+        let left: DiffDocument
+        let right: DiffDocument
+        /// The larger of the two sides' line numbers. Both gutters are sized from it so the
+        /// two code columns start at the same x, even where one side has no numbers at all
+        /// (a new file's old side).
+        let lineNumberDigits: Int
+    }
+
+    /// Builds both columns of a split diff from one fold, so the two sides can never
+    /// disagree about where a band sits or how many rows the file has: a pair with an empty
+    /// side gets a blank paragraph (a filler row), which is what keeps the rows below it in
+    /// step across the two panes.
+    static func buildSplitPair(rows: [DiffRow], expansion: DiffExpansion, palette: DiffPalette,
+                               codeFont: NSFont, lineSpacing: CGFloat,
+                               gapText: DiffGapText = .unavailable) -> SplitPair {
+        let folded = DiffParser.displayItems(lines: rows, expansion: expansion, gapText: gapText)
+        let pairs = DiffPairing.pairs(of: folded)
+
+        var leftItems: [DisplayItem] = []
+        var rightItems: [DisplayItem] = []
+        var leftRows: [DiffRow] = []
+        var rightRows: [DiffRow] = []
+        leftItems.reserveCapacity(pairs.count)
+        rightItems.reserveCapacity(pairs.count)
+
+        for (index, pair) in pairs.enumerated() {
+            leftItems.append(sideItem(pair.left, side: .left, filler: index))
+            rightItems.append(sideItem(pair.right, side: .right, filler: index))
+            if case .line(let row) = pair.left { leftRows.append(sideRow(row, side: .left)) }
+            if case .line(let row) = pair.right { rightRows.append(sideRow(row, side: .right)) }
+        }
+
+        // The two columns' code must start at the same x, so both gutters take the wider
+        // of the two sides' line numbers rather than each side's own.
+        let ceiling = rows.reduce(0) { max($0, $1.oldLine ?? 0, $1.newLine ?? 0) }
+        return SplitPair(
+            left: build(items: leftItems, allRows: leftRows, palette: palette,
+                        codeFont: codeFont, lineSpacing: lineSpacing,
+                        lineNumberCeiling: ceiling),
+            right: build(items: rightItems, allRows: rightRows, palette: palette,
+                         codeFont: codeFont, lineSpacing: lineSpacing,
+                         lineNumberCeiling: ceiling),
+            lineNumberDigits: max(2, String(max(ceiling, 1)).count)
+        )
+    }
+
+    /// A pair's element as this side's paragraph — a blank filler row when the other side
+    /// is the only one with content.
+    private static func sideItem(_ item: DiffItem?, side: Side, filler: Int) -> DisplayItem {
+        guard let item else { return .line(fillerRow(filler)) }
+        switch item {
+        case .line(let row): return .line(sideRow(row, side: side))
+        case .band: return displayItem(item)
+        }
+    }
+
+    /// A code line as one column sees it: the side keeps its own line number and drops the
+    /// other side's, so a column is numbered by the file it is showing. The text, kind, id,
+    /// and emphasis are untouched — the id still keys the syntax pass, and the emphasis
+    /// still marks the span this row was word-diffed against.
+    private static func sideRow(_ row: DiffRow, side: Side) -> DiffRow {
+        DiffRow(id: row.id, kind: row.kind, text: row.text,
+                oldLine: side == .left ? row.oldLine : nil,
+                newLine: side == .right ? row.newLine : nil,
+                emphasis: row.emphasis)
+    }
+
+    /// A row that exists only to hold a column's place opposite a line the other column has.
+    /// Empty text in the code font gives it the same height as a code row, and `context`
+    /// gives it no wash, no number, and no sign — the padding reads as nothing at all.
+    private static func fillerRow(_ index: Int) -> DiffRow {
+        // A namespace no parsed or spliced row can reach: gap lines are negative line
+        // numbers, so this sits far outside anything a real file produces.
+        DiffRow(id: -(2_000_000 + index), kind: .context, text: "", oldLine: nil, newLine: nil)
     }
 }
