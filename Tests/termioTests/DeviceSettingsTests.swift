@@ -111,4 +111,163 @@ final class DeviceSettingsTests: XCTestCase {
         XCTAssertEqual(url.deletingLastPathComponent().path, DeviceStateCache.directory.path)
         XCTAssertFalse(url.lastPathComponent.contains("/"))
     }
+
+    // MARK: What an install covered
+
+    private func state(
+        agents: [String: String], covered: [String]?, stamped: Bool = true
+    ) -> DeviceDiscoveredState {
+        DeviceDiscoveredState(
+            checkedAt: Date(), reachable: true, agents: agents,
+            integrationVersion: stamped ? AppInfo.buildStamp : nil,
+            integrationAgents: covered)
+    }
+
+    func testAnAgentInstalledAfterSetupNeedsSetupAgain() {
+        // Both halves write only for agents whose CLI is on the machine, so the
+        // agent that arrived afterwards has no hooks and reports nothing. The
+        // version stamp alone cannot see this — it is still this build's.
+        let machine = state(
+            agents: ["claudeCode": "available", "codex": "available"],
+            covered: ["claudeCode"])
+        XCTAssertEqual(machine.agentsOutsideIntegration, ["codex"])
+        XCTAssertFalse(machine.carriesCurrentIntegration)
+    }
+
+    func testAnAgentThatWentMissingIsNotAReasonToSetUpAgain() {
+        // The reverse of the case above: the install covered more than the
+        // machine now has. Nothing is un-wired by an uninstall, and sending the
+        // user back to setup for it would be the false alarm §D4 exists to stop.
+        let machine = state(
+            agents: ["claudeCode": "available", "codex": "missing"],
+            covered: ["claudeCode", "codex"])
+        XCTAssertEqual(machine.agentsOutsideIntegration, [])
+        XCTAssertTrue(machine.carriesCurrentIntegration)
+    }
+
+    func testABuildThatRecordedNoListIsLeftAlone() {
+        // A device file written before this was recorded. Reading `nil` as
+        // "covered nothing" would put every machine in the roster back on "set
+        // up" the moment this ships; the next app update moves the stamp anyway.
+        let machine = state(agents: ["claudeCode": "available"], covered: nil)
+        XCTAssertEqual(machine.agentsOutsideIntegration, [])
+        XCTAssertTrue(machine.carriesCurrentIntegration)
+    }
+
+    func testARefreshDoesNotEraseWhatTheInstallCovered() {
+        // The pane probes on open, and a probe carries no integration record of
+        // its own. Carrying the version but dropping the agent list is worse than
+        // dropping both: `nil` reads as "covered everything", so the refresh
+        // would silently erase the only thing that notices a new agent.
+        let before = state(agents: ["claudeCode": "available"], covered: ["claudeCode"])
+        var fresh = DeviceDiscoveredState(
+            checkedAt: Date(), reachable: true,
+            agents: ["claudeCode": "available", "codex": "available"])
+        fresh.carryIntegration(from: before)
+        XCTAssertEqual(fresh.integrationVersion, AppInfo.buildStamp)
+        XCTAssertEqual(fresh.integrationAgents, ["claudeCode"])
+        XCTAssertEqual(fresh.agentsOutsideIntegration, ["codex"])
+    }
+
+    func testADaemonThatCouldNotBeAskedIsNotAnAgentProblem() {
+        // ssh reached the box and `termiod` could not answer. Reporting that as
+        // an empty agent roster reads as Ready with no agents — a machine whose
+        // daemon will not start is not ready, and the button that repairs it is
+        // Set Up, not Check Again.
+        let mute = DeviceDiscoveredState(
+            checkedAt: Date(), reachable: true,
+            integrationVersion: AppInfo.buildStamp, daemonAnswered: false)
+        XCTAssertFalse(mute.daemonAnswered)
+        // An older file never recorded it, and must not start reading as broken.
+        XCTAssertTrue(state(agents: [:], covered: nil).daemonAnswered)
+    }
+
+    func testADeviceFileWithoutTheNewFieldsStillDecodes() {
+        // Swift's synthesized decoder does not apply property defaults, so a
+        // non-optional addition inside `CodingKeys` would throw `keyNotFound` on
+        // every file already on disk — and `DeviceStateCache` swallows that to
+        // nil, emptying the cache for the whole roster.
+        let onDisk = """
+            {"checkedAt":780000000,"reachable":true,"agents":{"claudeCode":"available"}}
+            """.data(using: .utf8)
+        let read = onDisk.flatMap {
+            try? JSONDecoder().decode(DeviceDiscoveredState.self, from: $0)
+        }
+        XCTAssertNotNil(read)
+        XCTAssertTrue(read?.daemonAnswered ?? false)
+        XCTAssertNil(read?.integrationAgents)
+    }
+
+    func testTheDaemonFailureNeverReachesDisk() {
+        // It is a fact about the probe that just ran. Persisted, it goes stale
+        // both ways: a recovered machine would read as broken forever, and a
+        // pane seeded from the cache would report a fault nobody re-confirmed.
+        var mute = state(agents: [:], covered: nil)
+        mute.daemonAnswered = false
+        let round = (try? JSONEncoder().encode(mute))
+            .flatMap { try? JSONDecoder().decode(DeviceDiscoveredState.self, from: $0) }
+        XCTAssertTrue(round?.daemonAnswered ?? false)
+        let text = (try? JSONEncoder().encode(mute)).flatMap { String(data: $0, encoding: .utf8) }
+        XCTAssertFalse(text?.contains("daemonAnswered") ?? true)
+    }
+
+    func testAnOlderDaemonsSilenceLeavesCoverageAlone() {
+        // A daemon too old to report what it had sends nothing, and that means
+        // *unknown*. Writing "nothing is covered" would make every agent on the
+        // box read as newly arrived on the next check.
+        var machine = state(agents: ["claudeCode": "available"], covered: ["claudeCode"])
+        machine.recordCoverage(present: nil)
+        XCTAssertEqual(machine.integrationAgents, ["claudeCode"])
+        XCTAssertEqual(machine.agentsOutsideIntegration, [])
+    }
+
+    func testCoverageIsEverythingTheMachineHadNotWhatWasWritten() {
+        // Presence is the primitive. Three catalog agents ship no hook spec and
+        // two share one skills directory, so an install's own rows undercount in
+        // ways that say nothing about an agent being here — and an agent outside
+        // its own coverage asks the user to set the machine up again forever.
+        var machine = state(
+            agents: ["claudeCode": "available", "crush": "available", "codex": "missing"],
+            covered: nil)
+        machine.recordCoverage(present: machine.availableAgents)
+        XCTAssertEqual(machine.integrationAgents, ["claudeCode", "crush"])
+        XCTAssertEqual(machine.agentsOutsideIntegration, [])
+        XCTAssertTrue(machine.carriesCurrentIntegration)
+    }
+
+    func testAnAgentThatWasHereButUnlistedIsAlreadyCovered() {
+        // The probe spans the catalog, not the user's list, so listing Codex
+        // later must not report it as newly arrived — it was wired all along.
+        var machine = state(
+            agents: ["claudeCode": "available", "codex": "available"], covered: nil)
+        machine.recordCoverage(present: machine.availableAgents)
+        XCTAssertEqual(machine.agentsOutsideIntegration, [])
+        XCTAssertTrue(machine.carriesCurrentIntegration)
+    }
+
+    func testAStampWithoutKnownCoverageWouldDisableDetection() {
+        // `nil` coverage reads as "covered everything", so stamping the version
+        // beside it claims the machine is current *and* switches off the only
+        // thing that would notice otherwise. The two must move together.
+        let claimed = DeviceDiscoveredState(
+            checkedAt: Date(), reachable: true,
+            agents: ["claudeCode": "available", "codex": "available"],
+            integrationVersion: AppInfo.buildStamp, integrationAgents: nil)
+        XCTAssertTrue(claimed.carriesCurrentIntegration)
+        XCTAssertEqual(claimed.agentsOutsideIntegration, [])
+
+        // Which is why `stampIntegration` leaves the version alone when it could
+        // not take a present set: unstamped reads as "set up this host", and the
+        // next good probe records both.
+        var unconfirmed = claimed
+        unconfirmed.carryIntegration(from: nil)
+        XCTAssertFalse(unconfirmed.carriesCurrentIntegration)
+    }
+
+    func testTheCoveredListSurvivesTheRoundTripToJSON() {
+        let machine = state(agents: ["claudeCode": "available"], covered: ["claudeCode"])
+        let data = try? JSONEncoder().encode(machine)
+        let read = data.flatMap { try? JSONDecoder().decode(DeviceDiscoveredState.self, from: $0) }
+        XCTAssertEqual(read?.integrationAgents, ["claudeCode"])
+    }
 }

@@ -3,13 +3,15 @@ import XCTest
 import TermioShared
 @testable import termio
 
-/// The two decisions on the clipboard side of the viewer↔device boundary.
+/// The clipboard decisions on the viewer↔device boundary.
 ///
-/// Both have a real failure mode. Misreading the clipboard sends a text paste
-/// down the transfer plane (or swallows a normal ⌘V), and a byte of drift in
-/// the `U` chunk layout makes the daemon reject the frame outright — there is
-/// no partial credit on a wire format, and the failure surfaces as a paste that
-/// silently does nothing, which is the bug this whole path exists to end.
+/// Misreading the clipboard sends a basename where an agent needs a path (or
+/// a text paste down the transfer plane, or swallows a normal ⌘V), and a byte
+/// of drift in the `U` chunk layout makes the daemon reject the frame outright
+/// — there is no partial credit on a wire format, and the failure surfaces as
+/// a paste that silently does nothing, which is the bug this whole path exists
+/// to end.
+@MainActor
 final class ClipboardTransferTests: XCTestCase {
     private var pasteboard: NSPasteboard!
 
@@ -22,6 +24,21 @@ final class ClipboardTransferTests: XCTestCase {
     override func tearDown() {
         pasteboard.releaseGlobally()
         super.tearDown()
+    }
+
+    private func writeFiles(
+        _ paths: [String],
+        filenameText: Bool = false,
+        isDirectory: Bool = false
+    ) {
+        pasteboard.clearContents()
+        let urls = paths.map { URL(fileURLWithPath: $0, isDirectory: isDirectory) as NSURL }
+        XCTAssertTrue(pasteboard.writeObjects(urls), "failed to write \(paths)")
+        if filenameText {
+            pasteboard.setString(
+                paths.map { ($0 as NSString).lastPathComponent }.joined(separator: "\n"),
+                forType: .string)
+        }
     }
 
     /// A 1×1 image encoded the way the pasteboard would carry it.
@@ -37,6 +54,134 @@ final class ClipboardTransferTests: XCTestCase {
             return Data()
         }
         return data
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+    /// The file URLs the machine boundary reads. Turning them into prompt text
+    /// is libghostty's job now; what still has to be right here is *which*
+    /// files a clipboard names, because an image is recognised from that list.
+    func testOnlyRealFileURLsAreRead() {
+        XCTAssertTrue(ClipboardFilePaths.fileURLs(on: pasteboard).isEmpty, "empty pasteboard")
+
+        pasteboard.clearContents()
+        pasteboard.setString("/Users/example/Desktop/example image.png", forType: .string)
+        XCTAssertTrue(
+            ClipboardFilePaths.fileURLs(on: pasteboard).isEmpty,
+            "text that looks like a path is not a file identity")
+
+        pasteboard.clearContents()
+        pasteboard.setData(Data("not a url".utf8), forType: .fileURL)
+        XCTAssertTrue(ClipboardFilePaths.fileURLs(on: pasteboard).isEmpty, "malformed data")
+
+        guard let remote = URL(string: "https://example.com") else {
+            return XCTFail("could not build the https URL")
+        }
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.writeObjects([remote as NSURL]))
+        XCTAssertTrue(ClipboardFilePaths.fileURLs(on: pasteboard).isEmpty, "a non-file URL")
+    }
+
+    /// Order and lexical normalization survive, because the boundary reports
+    /// the file it carried by the path the user copied.
+    func testFileURLsKeepOrderAndAreStandardized() {
+        writeFiles([
+            "/Users/example/Desktop/first.txt",
+            "/Users/example/foo/../bar/second.txt",
+        ])
+        XCTAssertEqual(
+            ClipboardFilePaths.fileURLs(on: pasteboard).map(\.path),
+            ["/Users/example/Desktop/first.txt", "/Users/example/bar/second.txt"])
+    }
+
+    /// A Finder-copied image file aimed at a session on another machine. The
+    /// path is worthless over there, so the bytes have to travel — this is the
+    /// read that decides that.
+    func testACopiedImageFileIsReadForTheCrossing() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appendingPathComponent("example image.png")
+        let png = imageData(.png)
+        try png.write(to: url)
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.writeObjects([url as NSURL]))
+        pasteboard.setString("example image.png", forType: .string)
+        // Finder ships the icon too; reading that instead would send a
+        // thumbnail where the user meant the picture.
+        pasteboard.setData(imageData(.tiff), forType: .tiff)
+
+        guard case let .image(image) = ClipboardImage.fileOnClipboard(pasteboard) else {
+            return XCTFail("a lone copied image file should be read for the crossing")
+        }
+        XCTAssertEqual(image.data, png, "the file's bytes, not its icon")
+        XCTAssertEqual(image.fileExtension, "png")
+    }
+
+    /// Everything that is not a lone image file keeps pasting as a path, so a
+    /// paste never silently uploads part of what was copied.
+    func testOnlyALoneImageFileCrossesTheBoundary() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let text = directory.appendingPathComponent("notes.txt")
+        try Data("hello".utf8).write(to: text)
+        let image = directory.appendingPathComponent("shot.png")
+        try imageData(.png).write(to: image)
+        let folder = directory.appendingPathComponent("folder", isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+
+        for (label, urls) in [
+            ("an ordinary file", [text]),
+            ("a directory", [folder]),
+            ("an image beside another file", [image, text]),
+        ] {
+            pasteboard.clearContents()
+            XCTAssertTrue(pasteboard.writeObjects(urls.map { $0 as NSURL }))
+            guard case .none = ClipboardImage.fileOnClipboard(pasteboard) else {
+                return XCTFail("\(label) should keep pasting as a path")
+            }
+        }
+    }
+
+    /// Over the cap the paste is refused out loud rather than falling through
+    /// to a local path that resolves to nothing on the far machine.
+    func testAnOversizeImageFileIsRefusedRatherThanPastedAsAPath() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(
+            at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let url = directory.appendingPathComponent("huge.png")
+        var bytes = imageData(.png)
+        bytes.append(Data(count: ClipboardImage.maximumFileBytes))
+        try bytes.write(to: url)
+        pasteboard.clearContents()
+        XCTAssertTrue(pasteboard.writeObjects([url as NSURL]))
+
+        guard case let .tooLarge(reported, size) = ClipboardImage.fileOnClipboard(pasteboard)
+        else {
+            return XCTFail("an oversize image should be refused, not silently ignored")
+        }
+        XCTAssertEqual(reported.lastPathComponent, "huge.png")
+        XCTAssertGreaterThan(size, ClipboardImage.maximumFileBytes)
     }
 
     func testPNGOnTheClipboardIsTakenVerbatim() {

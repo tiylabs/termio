@@ -3,8 +3,8 @@ title: 设备
 description: 把 Agent 跑在你自己的机器上——本机、桌上的 Mac mini、一台 VPS。Termio 通过 SSH 把一个二进制复制过去、把 Agent 配好，会话是否附着都照跑不误。
 x-i18n:
   source_path: devices.mdx
-  source_hash: 820e3b65a2f82e7decceff3c4e4848d75a72606ffb00284729f9d86e2d113d82
-  generated_at: 2026-09-17
+  source_hash: a1e30893cfb7fa25578f1bc6f6964f1ae141cfd7f8245db8378d6108fe290feb
+  generated_at: 2026-09-19
 ---
 
 Termio 把 Agent 跑在你自己的机器上：本机、同一张桌子上的 Mac mini、你自己付钱的
@@ -37,20 +37,15 @@ Termio 读 `~/.ssh/config`，绝不背着你改写它。你本来 `ssh` 得上�
 ## 设置一台设备
 
 打开**设置 ▸ 远程主机**，选中那台机器，按**设置**。Termio 会通过 SSH 把一个二进制
-——Termio server `termiod`——复制到 `~/.local/bin`。不需要 root，不需要包管理器，也不用往
+——Termio server `termiod`，Linux 上还有 `termio` 命令行工具——复制到 `~/.local/bin`。不需要
+ root，不需要包管理器，也不用往
 shell 配置里加东西。接着它会找那台机器上装了哪些 Agent CLI，给每一个写入 Termio 的
-hooks、配置块和 Agent 技能，于是 VPS 上的 Agent 也能像本机的一样汇报**工作中**、
-**需要你**和**完成**。
+hooks 和 Agent 技能，于是 VPS 上的 Agent 也能像本机的一样汇报**工作中**、**需要你**和
+**完成**。
 
-同一个按钮也是更新。它从任何状态出发都能用——什么都没装、装的是旧版本、装了新的但
-运行中的 daemon 还没接管——而且新的那个要是答不上话，它会把旧的放回去。设备页面上会
-写着它当前跑的版本。
-
-如果更新会打断正在进行的工作，它会说出来并点名是哪个会话，旁边给一个**仍然更新**。你
-自己闲着的终端从不挡更新；正在跑的命令或者干到一半的 Agent 才挡。
-
-在**Termio 安装的内容**里，daemon、hooks 和技能各有自己的**重新安装**。重装只替换
-Termio 放上去的那份 hooks，你自己写的原样保留。
+同一个按钮就是更新，而机器页面把整条链压成了一行——*就绪*、*设置这台主机*，或者
+*更新就绪*。[远程主机](/zh-CN/docs/remote-hosts)是那份操作手册：测试线路、为什么密码
+不够用、每一级装了什么，以及怎么修好其中一级。
 
 <Callout type="note" title="Termio 不做什么">
   Termio 从不开通机器，不跑控制面，也不中转你的流量。它调用系统的 `ssh`，唯一的权威是
@@ -76,21 +71,25 @@ daemon 中。应用只是一个负责附着和分离的查看器。
 - **文件**——浏览检出、打开文件，并把它存回读它出来的那台机器。
 - **搜索**——在那台机器上搜检出，跟着它的 `cd` 走，打开搜到的东西。
 - **更改、对比、历史**——Git 面板读那台机器的仓库，并且在那边和在这边一样是只读的。
-- **Agent**——同一套清单、hooks 和技能，装到那台机器上。**设置 ▸ Agent** 带一个设备
-  作用域，正是因为一个 Agent 的 CLI 装在哪儿，是关于某一台机器的事实。
+- **Agent**——同一套清单、hooks 和技能，装到那台机器上。一个 Agent 的 CLI 装在哪儿是
+  关于某一台机器的事实，所以它在**远程主机**下那台机器自己的页面上回答，而不是在一个
+  讲 Agent 的页面上。
 - **粘贴图片**给跑在那台机器上的 Agent，Termio 会把文件送过去。
 
 不是 Termio 起的会话会自己露面——`ssh` 上去、用 `termiod` 起个东西，侧栏就把它
 归档成一个普通会话。数据源是机器自己的名册，箱子上跑着的东西不会被漏掉。
 
 <Cards>
+  <Card href="/zh-CN/docs/remote-hosts" title="远程主机">
+    添加主机、测试线路，以及读懂那一行说明是否就绪的话。
+  </Card>
   <Card href="/zh-CN/docs/workspaces" title="工作区">
     决定一个项目在哪台机器上打开的那个作用域。
   </Card>
   <Card href="/zh-CN/docs/session-control" title="会话控制与 CLI">
     让状态诚实的那套 hooks，本机和每台设备都一样。
   </Card>
-  <Card href="/zh-CN/docs/iphone" title="iPhone 伴侣应用">
+  <Card href="/zh-CN/docs/iphone" title="iOS 应用">
     把手机和一台设备配对，随时随地看它的会话。
   </Card>
 </Cards>

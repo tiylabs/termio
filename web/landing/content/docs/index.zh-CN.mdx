@@ -3,8 +3,8 @@ title: 简介
 description: Termio 是一款原生 Mac 应用，为你的 AI 编程 Agent 提供工作台——Claude Code、Codex 以及其他 Agent 并排运行，各自待在真实终端里，跑在本机或你自己的机器上。
 x-i18n:
   source_path: index.mdx
-  source_hash: 7967af150642bdc9ef4c8af8a89001bfb3202eae6247108ffbb8d16c52d03073
-  generated_at: 2026-08-30
+  source_hash: a84e3d11b4b297d4273f73fb7c89b26a123137fd984129d54369adfe5cce0256
+  generated_at: 2026-09-19
 ---
 
 Termio 是一款原生 Mac 应用，为你的 AI 编程 Agent 安了个家。你不必再在零散的终端
@@ -38,6 +38,38 @@ Termio 没有账号，也不需要登录。你的终端、代码和 Agent 对话
 
 Termio **免费使用**——没有账号，没有许可证密钥，也没有支付后端。
 
+## 选一条路
+
+大多数人来到这里，原因无非三种。从你真正所处的位置开始：
+
+<Cards>
+  <Card href="/zh-CN/docs/first-session" title="我只想先跑起来一个 Agent">
+    安装、打开项目、在真实终端里启动 Claude Code 或 Codex，然后拆分窗口。十分钟，不需要
+    先懂任何概念。
+  </Card>
+  <Card href="/zh-CN/docs/agents" title="我已经在同时跑好几个了">
+    真正有回报的那部分：每个会话一份实时状态、用 worktree 让两个 Agent 不动同一批文件，
+    以及把侧栏当成整支队伍的看板。
+  </Card>
+  <Card href="/zh-CN/docs/devices" title="我的代码在另一台机器上">
+    一台 VPS、一台 Mac mini、一台开发机。Termio 通过你自己的 SSH 配置把一个二进制复制
+    过去，会话就跑在那台机器上，无论你有没有附着。
+  </Card>
+</Cards>
+
+## 或者让 Agent 替你读文档
+
+你手上本来就有一个编程 Agent。这份文档以它能直接读的形式发布，所以你可以把安装这件事交给
+它，而不是自己动手：
+
+```text
+Read https://termio.sh/llms.txt and then help me set up Termio for my project.
+```
+
+每一页也都能在自己的 URL 上以纯 Markdown 应答，而
+[llms-full.txt](https://termio.sh/llms-full.txt) 是全部页面合成的一个文件——这样 Agent
+就能照着文档回答，而不是自己编。
+
 ## 从这里开始
 
 <Cards>
@@ -53,10 +85,13 @@ Termio **免费使用**——没有账号，没有许可证密钥，也没有支
   <Card href="/zh-CN/docs/devices" title="设备">
     把工作区放到另一台机器上，并在那儿装好 Termio server。
   </Card>
+  <Card href="/zh-CN/docs/persistence" title="什么会留下来">
+    关闭、退出、更新、重启——正在跑的 Agent 究竟会怎么样。
+  </Card>
   <Card href="/zh-CN/docs/session-control" title="编排与命令行">
     用 `termio sessions` 让 Agent 互相派生、驱动与监督。
   </Card>
-  <Card href="/zh-CN/docs/iphone" title="iPhone 伴侣应用">
+  <Card href="/zh-CN/docs/iphone" title="iOS 应用">
     配对手机，随时随地查看正在运行的 Agent。
   </Card>
 </Cards>

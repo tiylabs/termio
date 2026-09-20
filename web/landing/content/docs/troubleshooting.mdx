@@ -1,21 +1,74 @@
 ---
 title: Troubleshooting
-description: The handful of things that go wrong — a status dot that never moves, a CLI that says disabled, sessions missing after a reboot, a box that stopped answering — and how to look rather than guess.
+description: The things that actually go wrong — a status dot that never moves, an agent that won’t launch, sessions missing after a reboot, a box that stopped answering, a phone that can’t connect — each with a way to look rather than guess.
 ---
 
-Most of what looks like a Termio bug is one of five things. Each has a way to
-check rather than guess.
+Almost everything that looks like a Termio bug is one of the cases below, and
+each one has a way to check rather than guess. Start here before filing anything.
+
+## Start with these three
+
+On any machine, in any state, these answer most of the question:
+
+```bash
+termiod status                 # what's installed here, and is a daemon answering?
+termiod list                   # what sessions is it holding?
+termiod logs -n 200            # what happened while nobody was watching
+```
+
+`termiod status` in particular ends a surprising share of “it broke” reports: it
+says which binary is installed, which version, and whether anything is actually
+listening on the socket. To ask about another machine, `termiod list --host
+<box>` queries that box's daemon over your own SSH config.
 
 ## A status dot never changes
 
-The sidebar's [status dots](/docs/sidebar#status) come from hooks installed into
-each agent's own config, and they are installed **per machine**. An agent on a
+The sidebar’s [status dots](/docs/sidebar#status) come from hooks installed into
+each agent’s own config, and they are installed **per machine**. An agent on a
 box you set up before turning the feature on has no hooks, so it reports nothing
 and Termio falls back to reading the screen.
 
 Open **Settings ▸ Remote Hosts**, pick the machine, open its **Agents** page and
-press **Reinstall Hooks and Skill**. For this Mac, the same button is on
-**Settings ▸ Agents**. See [Status hooks & session control](/docs/session-control).
+press **Reinstall Hooks and Skill**. For this Mac the same repair is
+**Install on This Mac**, on **Settings ▸ Agents**. See [Status hooks & session
+control](/docs/session-control).
+
+## The agent is sitting on a “trust these hooks?” prompt
+
+Some agents verify their hook files and refuse to run hooks whose contents
+changed — Codex will show **Modified since last trusted** and wait. This one is
+nasty because the hooks *are* the status channel: until you answer, the agent
+reports nothing, so the sidebar shows the last status it knew rather than
+**needs you**.
+
+If a session looks idle but nothing is happening, look at the pane itself. Answer
+the prompt once and status resumes. Termio re-asserts its hooks on launch (that
+is what keeps other tools from quietly replacing them), so the prompt can come
+back after an update.
+
+## An agent won’t launch, or exits instantly
+
+A pane that dies at once with “failed to launch” is nearly always `PATH`, not the
+agent. Termio starts agents through your real login shell, so anything your
+profile sets up is available — but a CLI installed somewhere your profile doesn’t
+add is still invisible.
+
+Open **Settings ▸ Agents** and look at the agent’s row: Termio resolves your login
+shell’s `PATH` and flags a command it can’t find. Either fix your profile, or
+paste the absolute path (`/opt/homebrew/bin/codex`) into the command field. The
+same field is per machine, so do it on the machine that’s failing.
+
+## Status hooks were working and stopped
+
+Agent config files are shared ground — other agent managers write to the same
+`~/.claude/settings.json` and `~/.codex/hooks.json`, and some replace the whole
+hooks block rather than merging into it. When that happens Termio’s reports stop
+arriving and status falls back to screen-reading.
+
+Termio re-asserts its own hooks when it launches and when you bring it back to
+the front, so on this Mac it usually heals by itself. That sweep is local only:
+another machine keeps whatever is on it until you repair it there, with
+**Reinstall Hooks and Skill** on that machine’s **Agents** page.
 
 ## `termio sessions` says `disabled`
 
@@ -25,6 +78,14 @@ which also installs the `termio` skill that teaches agents the commands exist.
 Every CLI error has the same shape and a nonzero exit code, so a script can
 branch on `error` rather than parse prose — the codes are listed in the
 [JSON contract](/docs/cli#json-contract).
+
+## `termio: command not found`
+
+The command is a symlink the app installs for you: **Settings ▸ Server ▸ Command
+line ▸ Command-line tool**, which links `termio` into `/usr/local/bin` (macOS
+asks once). If the toggle is already on, open a new shell — a session started
+before the link existed has a stale `PATH` hash. `termiod` is a different command
+that lives on each machine; see [The Termio server](/docs/server).
 
 ## Sessions are gone after a reboot
 
@@ -37,7 +98,7 @@ termiod service status
 ```
 
 This is the usual surprise on a remote box, where nobody logs in interactively.
-See [The Termio server](/docs/server).
+See [The Termio server](/docs/server) and [What survives](/docs/persistence).
 
 ## A machine stopped answering
 
@@ -50,7 +111,39 @@ termiod list --host mybox      # is the server answering there?
 termiod deploy --host mybox    # reinstall and verify it
 ```
 
-`deploy` is a reconcile, so running it against a box in a bad state is safe.
+`deploy` is a reconcile, so running it against a box in a bad state is safe. A key
+is the credential that works everywhere, including for sessions already running on
+the box; a passphrase-protected key needs to be loaded into `ssh-agent` first, the
+same as it would for any non-interactive `ssh`. The machine’s own page has a
+**Test** button that names which outcome you have — see [Remote
+hosts](/docs/remote-hosts#testing-the-route).
+
+## The iPhone app can’t reach a machine
+
+Pairing binds the phone to one address. Check them in order:
+
+1. **Is the machine awake?** A sleeping Mac answers nothing, and nothing in the
+   app can wake it from outside. Pair against a machine that stays up if you want
+   this to always work — see [What survives](/docs/persistence#sleep).
+2. **Is it published?** **Settings ▸ Mobile** must have the machine published; on
+   the same Wi-Fi that’s all it takes.
+3. **From elsewhere, is there a tunnel?** Off your own network the machine needs
+   an address — **Settings ▸ Mobile ▸ Tunnel**, or your own.
+4. **Was the token rotated?** **Rotate Token…** signs out every paired phone by
+   design. Scan the QR code again.
+
+See [The iOS app](/docs/iphone).
+
+## Notifications don’t appear
+
+Task notifications are a system permission like any other: macOS asks once, and
+if it was declined the app can’t ask again. Check **System Settings ▸
+Notifications ▸ Termio**, and check that **Task completion** is on under
+**Settings ▸ Agents ▸ Notifications**.
+
+They’re also deliberately quiet. A turn that finished while Termio was the
+frontmost app doesn’t notify — you were already looking at it — and neither does
+a turn that took only a moment.
 
 ## Something looks wrong and you want evidence
 
@@ -64,9 +157,8 @@ termiod logs --path            # the file itself, for a bug report
 ```
 
 <Callout type="tip">
-  `termiod status` is the fastest first question on any machine: it says which
-  binary is installed, which version, and whether a daemon is actually answering
-  on the socket. A surprising number of "it broke" reports end there.
+  Reproducing something intermittent? Leave `termiod logs -f` running in a pane of
+  its own. The log is the one record that spans the moment you weren’t attached.
 </Callout>
 
 ## Still stuck
@@ -74,4 +166,6 @@ termiod logs --path            # the file itself, for a bug report
 Open an issue at
 [github.com/termio-sh/termio](https://github.com/termio-sh/termio/issues) with
 the output of `termiod status` and the tail of `termiod logs`. Those two answer
-most of the questions a maintainer would otherwise have to ask.
+most of the questions a maintainer would otherwise have to ask. Add the macOS
+version, the Termio version, and whether the session was local or on another
+machine.

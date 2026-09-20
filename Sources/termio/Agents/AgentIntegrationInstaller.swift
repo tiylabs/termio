@@ -61,10 +61,16 @@ enum AgentIntegrationInstaller {
     /// pane's "Reinstall hooks" must not touch the skill. The roster is the
     /// whole catalog: that is what the app has always installed, and this stage
     /// changes no Settings surface.
+    /// `commands` is what each agent launches with **on that machine**, by id:
+    /// the path the user authored in Settings where they authored one. The
+    /// daemon judges presence against the binary a session would really run, so
+    /// an agent the app reports available is never one the daemon silently
+    /// refuses to write a config for.
     static func sync(
         hooks: Termiod.AgentHalfAction,
         skills: Termiod.AgentHalfAction,
-        target: Target = .thisMac
+        target: Target = .thisMac,
+        commands: [String: String] = [:]
     ) async -> InstallOutcome {
         // Every local hook invokes the channel-stable CLI copy, so make sure it
         // carries this build's content before the daemon stamps its path
@@ -75,16 +81,17 @@ enum AgentIntegrationInstaller {
         // named that half decides whether it is touched at all.
         let version = hookVersion
         do {
-            let results = try await Task.detached(priority: .userInitiated) {
+            let reply = try await Task.detached(priority: .userInitiated) {
                 try Termiod.installAgents(
                     route: target.route,
                     agents: nil,
                     hooks: hooks,
                     skills: skills,
                     reporter: target.reporter,
-                    hookVersion: version)
+                    hookVersion: version,
+                    commands: commands)
             }.value
-            return InstallOutcome(results)
+            return InstallOutcome(reply)
         } catch {
             Log.termiod.error("""
                 agent integration install failed: \
@@ -101,11 +108,11 @@ enum AgentIntegrationInstaller {
     /// session launches with, it costs no IPC, and routing a read-only question
     /// through the daemon would change an answer the Agents tab already renders
     /// correctly.
-    static func probe(host: String, agents: [String]) async throws
+    static func probe(host: String, agents: [String], commands: [String: String]) async throws
         -> [Termiod.AgentPresence]
     {
         try await Task.detached(priority: .userInitiated) {
-            try Termiod.probeAgents(route: .ssh(host), agents: agents)
+            try Termiod.probeAgents(route: .ssh(host), agents: agents, commands: commands)
         }.value
     }
 }
@@ -117,8 +124,10 @@ extension InstallOutcome {
     /// name is recorded as failed if either refused, because a row that says
     /// "Claude Code" and means "its skill landed but its hooks did not" is worse
     /// than no row.
-    init(_ results: [Termiod.AgentInstallResult]) {
+    init(_ reply: Termiod.AgentsInstalledPayload) {
         self.init()
+        let results = reply.results
+        coveredIDs = reply.present.isEmpty ? nil : reply.present.sorted()
         var seen: [String: Bool] = [:]
         var order: [String] = []
         for result in results {

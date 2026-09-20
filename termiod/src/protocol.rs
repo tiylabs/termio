@@ -979,6 +979,14 @@ pub enum Control {
         /// upgrade rewrites the hooks. Absent means this daemon's own version.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         hook_version: Option<String>,
+        /// What each agent actually launches with on this box, by id. The user
+        /// can author a path in Settings for an agent that is not on `PATH` at
+        /// all, and presence has to be judged against the binary a session would
+        /// really run — otherwise the client reports an agent available and this
+        /// box refuses to write its config. Absent falls back to the manifest's
+        /// own command, which is what every older client sends.
+        #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+        commands: std::collections::HashMap<String, String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         seq: Option<u64>,
     },
@@ -988,6 +996,14 @@ pub enum Control {
     ProbeAgents {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         agents: Option<Vec<String>>,
+        /// What each agent actually launches with on this box, by id. The user
+        /// can author a path in Settings for an agent that is not on `PATH` at
+        /// all, and presence has to be judged against the binary a session would
+        /// really run — otherwise the client reports an agent available and this
+        /// box refuses to write its config. Absent falls back to the manifest's
+        /// own command, which is what every older client sends.
+        #[serde(default, skip_serializing_if = "std::collections::HashMap::is_empty")]
+        commands: std::collections::HashMap<String, String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         seq: Option<u64>,
     },
@@ -1208,6 +1224,11 @@ pub enum Control {
     /// have.
     AgentsInstalled {
         results: Vec<crate::agent::install::InstallResult>,
+        /// The agents this box had while it installed, by id. Absent from an
+        /// older daemon, which is why the client treats it as "unknown" rather
+        /// than as "none".
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        present: Vec<String>,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         re: Option<u64>,
     },

@@ -207,8 +207,11 @@ enum DeviceProbe {
         // agent — a dozen round trips to learn something the box knows about
         // itself in microseconds.
         do {
+            // The authored commands travel with the question, so the daemon
+            // judges the same binary a session on that box would launch.
             let presence = try await AgentIntegrationInstaller.probe(
-                host: alias, agents: commands.map(\.id))
+                host: alias, agents: commands.map(\.id),
+                commands: Dictionary(commands.map { ($0.id, $0.command) }) { first, _ in first })
             var agents: [String: String] = [:]
             for entry in presence {
                 agents[entry.id] = entry.present
@@ -230,7 +233,7 @@ enum DeviceProbe {
                 agent probe on \(alias, privacy: .public) failed: \
                 \(error.localizedDescription, privacy: .public)
                 """)
-            return DeviceDiscoveredState(checkedAt: now, reachable: true)
+            return DeviceDiscoveredState(checkedAt: now, reachable: true, daemonAnswered: false)
         }
     }
 }
@@ -251,8 +254,25 @@ extension DeviceDiscoveredState {
     /// Compared against the build, not merely checked for presence, because a
     /// local hook embeds the CLI's path and a device hook embeds `termiod`'s: an
     /// upgrade that moves either leaves a hook that cannot exec.
+    ///
+    /// The stamp alone is not enough. Both halves of the install write only for
+    /// agents whose CLI is on the machine, so an agent installed *after* a setup
+    /// has no hooks while the stamp still reads as current — the machine looks
+    /// done and the new agent silently reports nothing. An agent the last install
+    /// did not cover therefore makes this false, which is what puts the pane back
+    /// on "set up this host".
     var carriesCurrentIntegration: Bool {
-        integrationVersion != nil && integrationVersion == AppInfo.buildStamp
+        integrationVersion != nil
+            && integrationVersion == AppInfo.buildStamp
+            && agentsOutsideIntegration.isEmpty
+    }
+
+    /// Agents the machine has now that the last install did not write for, by
+    /// `AgentPreset.rawValue`. Empty for a build that recorded no list — see
+    /// `integrationAgents` for why that reads as "covered everything".
+    var agentsOutsideIntegration: [String] {
+        guard let covered = integrationAgents else { return [] }
+        return availableAgents.filter { !covered.contains($0) }
     }
 }
 
@@ -300,13 +320,42 @@ final class DevicePaneModel: ObservableObject {
         settings.orderedAgents(AgentPreset.codingAgents.filter(settings.isAgentListed))
     }
 
-    private var commandPairs: [(id: String, command: String)] {
-        listedAgents.map { ($0.rawValue, settings.command(for: $0, on: device) ?? "") }
+    /// Every agent in the catalog with what it launches with here — not just the
+    /// ones on the user's list.
+    ///
+    /// Coverage is a fact about the machine, and the daemon installs against its
+    /// own whole catalog. Asking only about listed agents made an agent that was
+    /// here all along read as newly arrived the day it was listed. It is still
+    /// one round trip either way.
+    var commandPairs: [(id: String, command: String)] {
+        AgentPreset.codingAgents.map { ($0.rawValue, settings.command(for: $0, on: device) ?? "") }
     }
 
     func readiness(for agent: AgentPreset) -> AgentReadiness {
         guard let discovered else { return .unknown }
         return discovered.readiness(for: agent)
+    }
+
+    /// Whether anything **on the user's list** answered *available* the last time
+    /// we looked. A fact the pane reports, never a state it blocks on.
+    ///
+    /// Listed only, though the probe now covers the catalog: the sentence this
+    /// feeds is about the agents the user actually works with, and a box holding
+    /// only agents they have never listed has nothing for them to run.
+    var hasAgentAvailable: Bool {
+        guard let discovered else { return false }
+        return listedAgents.contains {
+            discovered.readiness(for: $0) == .available
+        }
+    }
+
+    /// Agents that arrived on the machine since the last install, named. In the
+    /// user's own agent order rather than the probe's, so the line reads the way
+    /// the rest of Settings lists them.
+    var agentsAwaitingIntegration: [String] {
+        let waiting = Set(discovered?.agentsOutsideIntegration ?? [])
+        guard !waiting.isEmpty else { return [] }
+        return listedAgents.filter { waiting.contains($0.rawValue) }.map(\.displayName)
     }
 
     /// Asks the machine, without changing anything on it. The pane's own refresh,
@@ -315,12 +364,11 @@ final class DevicePaneModel: ObservableObject {
         guard !readiness.isBusy else { return }
         readiness = .checking
         step = .foundation
-        let state = await DeviceProbe.inspect(device: device, commands: commandPairs)
-        // Carry the integration stamp forward: a probe asks what is on the
+        var state = await DeviceProbe.inspect(device: device, commands: commandPairs)
+        // Carry the integration record forward: a probe asks what is on the
         // machine, and does not un-install what a previous setup put there.
-        var merged = state
-        merged.integrationVersion = discovered?.integrationVersion
-        apply(merged)
+        state.carryIntegration(from: discovered)
+        apply(state)
         step = nil
     }
 
@@ -343,11 +391,17 @@ final class DevicePaneModel: ObservableObject {
         }
 
         step = .probeAgents
-        var state = await DeviceProbe.inspect(device: device, commands: commandPairs)
-        state.integrationVersion = discovered?.integrationVersion
+        // Captured once. The probe that decides coverage, the install, and the
+        // stamp all have to be talking about the same commands — Settings stays
+        // editable while this runs.
+        let commands = commandPairs
+        var state = await DeviceProbe.inspect(device: device, commands: commands)
+        state.carryIntegration(from: discovered)
         apply(state)
-        // `resolve` already names the first thing in the way — unreachable, or
-        // nothing to run — and those are exactly the two that stop the chain.
+        // The one thing that stops the chain here is a machine that stopped
+        // answering between the two rungs. Finding no agent does not: the
+        // integration rung then has nothing to write, which is an empty result
+        // rather than a failure, and the machine is set up either way.
         if case .blocked = readiness { return }
 
         step = .installIntegration
@@ -357,7 +411,8 @@ final class DevicePaneModel: ObservableObject {
         let outcome = await AgentIntegrationInstaller.sync(
             hooks: settings.agentHooksEnabled ? .install : .remove,
             skills: settings.sessionControlEnabled ? .install : .remove,
-            target: device.integrationTarget)
+            target: device.integrationTarget,
+            commands: Dictionary(commands.map { ($0.id, $0.command) }) { first, _ in first })
         // A request the machine never acted on is reported in its own words —
         // it is a sentence, not an agent that refused.
         if let failure = outcome.failure {
@@ -375,16 +430,26 @@ final class DevicePaneModel: ObservableObject {
             return
         }
         state.integrationVersion = AppInfo.buildStamp
+        state.recordCoverage(present: outcome.coveredIDs)
         apply(state)
         // The outcome line already says "Ready"; what this adds is *what was
         // put there*, and with both switches off there is nothing to add.
+        //
+        // An empty outcome is the other way there is nothing to add: a machine
+        // with no agent on it has no config for either half to write into. That
+        // is not "Nothing to install" in the red sense `summarizing` reserves for
+        // a request that came back with nothing — the Ready line above already
+        // says the box has no agents, and a failure chip under it would
+        // contradict the word it sits beneath.
         let headline: String? = switch (settings.agentHooksEnabled, settings.sessionControlEnabled) {
         case (true, true): localized("Hooks and skill installed")
         case (true, false): localized("Hooks installed")
         case (false, true): localized("Skill installed")
         case (false, false): nil
         }
-        feedback = headline.map { .summarizing(outcome, headline: $0, unit: localized("agents")) }
+        feedback = outcome.isEmpty
+            ? nil
+            : headline.map { .summarizing(outcome, headline: $0, unit: localized("agents")) }
     }
 
     /// The first rung. This Mac needs the `termio` CLI on `PATH` — a hook it
@@ -427,10 +492,26 @@ final class DevicePaneModel: ObservableObject {
     /// does the same thing inline; Reinstall is the other way the same fact
     /// becomes true, and until it said so a repaired machine kept reading as
     /// behind.
-    func stampIntegration() {
+    /// Re-probes first. Coverage may only be recorded beside a fresh answer, and
+    /// this runs after a *successful* install — the agent the user installed five
+    /// minutes ago is exactly the one that just got its hooks, and stamping the
+    /// older set would report it as newly arrived on the next check.
+    /// Records a successful install, covering what that machine reported having
+    /// while it ran.
+    ///
+    /// No probe of its own any more. One was a second question asked at a second
+    /// moment — it could time out into "everything is here", or read a command
+    /// the user edited while the install was in flight, and either way the
+    /// coverage written claimed agents the daemon had skipped. The machine's own
+    /// answer travels back with the install.
+    func stampIntegration(_ outcome: InstallOutcome) {
         var state = discovered ?? DeviceDiscoveredState(checkedAt: Date(), reachable: true)
         state.checkedAt = Date()
         state.integrationVersion = AppInfo.buildStamp
+        state.recordCoverage(present: outcome.coveredIDs)
+        // The install round-tripped through that machine's daemon, which is
+        // proof it answers.
+        state.daemonAnswered = true
         apply(state)
     }
 
@@ -442,16 +523,25 @@ final class DevicePaneModel: ObservableObject {
     }
 
     /// What a completed probe means, in one line: ready when the machine
-    /// answered, something on it can run, and this build put its hooks there —
-    /// and otherwise the **first** thing standing in the way, in that order.
+    /// answered and this build put its daemon and hooks there — and otherwise
+    /// the **first** thing standing in the way.
     ///
-    /// Order matters more than completeness. A box that does not answer also has
-    /// no agent CLIs and no hooks, and saying all three would invite the user to
-    /// go install an agent on a machine that is switched off.
+    /// Having no agent CLI is **not** one of those things. Setting a machine up
+    /// is putting `termiod` on it; the agents are software the user installs
+    /// themselves, each with its own installer per distro and its own login.
+    /// Gating on them made a fresh box report a fault for the one thing setup
+    /// was never going to do, and then offered the same button again as the fix.
+    /// What the box has is reported instead — `hasAgentAvailable`, in the pane's
+    /// own words.
     private func resolve(_ state: DeviceDiscoveredState) -> DeviceReadinessState {
         guard state.reachable else { return .blocked(localized("Can’t reach \(device.name).")) }
-        guard state.agents.values.contains(AgentReadiness.available.rawValue) else {
-            return .blocked(localized("No agent CLIs found on \(device.name)."))
+        // ssh got there and the daemon did not answer — an old `termiod`, or one
+        // that will not start. Named rather than folded into "no agent CLIs",
+        // which sends the user to install an agent on a machine whose daemon is
+        // the thing that is broken; and blocking rather than Ready, because the
+        // button that repairs it is Set Up, which deploys the daemon again.
+        guard state.daemonAnswered else {
+            return .blocked(localized("`termiod` on \(device.name) isn’t answering."))
         }
         // Not blocked, just not done — the setup button is the whole next step, so
         // it reads as "set up this device" rather than as a fault.

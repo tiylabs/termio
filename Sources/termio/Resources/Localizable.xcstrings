@@ -71,6 +71,16 @@
         }
       }
     },
+    "%@ arrived on %@ since the last setup. Set up again to install Termio’s hooks there.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "上次设置之后，%@ 才装到 %@ 上。再设置一次，把 Termio 的 hook 装进去。"
+          }
+        }
+      }
+    },
     "%@ didn’t come up — check the network and retry": {
       "localizations": {
         "zh-Hans": {
@@ -4334,22 +4344,12 @@
         }
       }
     },
-    "No agent CLIs found on %@.": {
+    "No agent CLIs on %@ yet. Install one there and it shows up here.": {
       "localizations": {
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "在 %@ 上未找到任何 Agent 命令行工具。"
-          }
-        }
-      }
-    },
-    "No agent CLIs found.": {
-      "localizations": {
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未找到任何 Agent 命令行工具。"
+            "value": "%@ 上还没有 Agent 命令行工具。在那台机器上装一个，这里就会显示。"
           }
         }
       }
@@ -8315,6 +8315,16 @@
           "stringUnit": {
             "state": "translated",
             "value": "`%@` 已在 PATH 中。运行 `%@ sessions …` 可驱动其他会话，运行 `%@ .` 可打开文件夹。"
+          }
+        }
+      }
+    },
+    "`termiod` on %@ isn’t answering.": {
+      "localizations": {
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ 上的 `termiod` 没有响应。"
           }
         }
       }

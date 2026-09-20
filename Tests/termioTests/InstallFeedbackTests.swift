@@ -81,22 +81,45 @@ final class InstallOutcomeFromReplyTests: XCTestCase {
             path: "/home/u/.\(name.lowercased())", status: status, detail: nil)
     }
 
+    private func reply(
+        _ results: [Termiod.AgentInstallResult], present: [String] = []
+    ) -> Termiod.AgentsInstalledPayload {
+        Termiod.AgentsInstalledPayload(results: results, present: present)
+    }
+
+    /// Coverage is the machine's own answer, not something read off the rows.
+    /// The rows undercount for reasons that say nothing about an agent being
+    /// there — three catalog agents ship no hook spec, two share a skills
+    /// directory — so the two must not be confused for each other.
+    func testCoverageComesFromTheReplyNotTheRows() {
+        let outcome = InstallOutcome(reply(
+            [row("Claude Code", "hooks", "installed")],
+            present: ["crush", "claudeCode"]))
+        XCTAssertEqual(outcome.coveredIDs, ["claudeCode", "crush"])
+        XCTAssertEqual(outcome.succeeded, ["Claude Code"])
+    }
+
+    /// A daemon too old to report it says nothing, which means *unknown*.
+    func testAnOlderDaemonReportsNoCoverage() {
+        XCTAssertNil(InstallOutcome(reply([row("Codex", "hooks", "installed")])).coveredIDs)
+    }
+
     func testAnAgentThatTookBothIsNamedOnce() {
-        let outcome = InstallOutcome([
+        let outcome = InstallOutcome(reply([
             row("Claude Code", "hooks", "installed"),
             row("Claude Code", "skill", "installed"),
             row("Codex", "hooks", "installed"),
-        ])
+        ]))
         XCTAssertEqual(outcome.succeeded, ["Claude Code", "Codex"])
         XCTAssertTrue(outcome.failed.isEmpty)
     }
 
     func testRefusingEitherHalfCountsAsRefused() {
-        let outcome = InstallOutcome([
+        let outcome = InstallOutcome(reply([
             row("Claude Code", "hooks", "installed"),
             row("Claude Code", "skill", "failed"),
             row("Codex", "hooks", "installed"),
-        ])
+        ]))
         XCTAssertEqual(outcome.succeeded, ["Codex"])
         XCTAssertEqual(outcome.failed, ["Claude Code"])
     }
@@ -104,12 +127,12 @@ final class InstallOutcomeFromReplyTests: XCTestCase {
     /// A dialect the daemon does not write is neither a success to claim nor a
     /// failure to blame anyone for, so it stays out of the sentence entirely.
     func testASkippedDialectIsNotReportedEitherWay() {
-        let outcome = InstallOutcome([row("Kimi", "hooks", "skipped")])
+        let outcome = InstallOutcome(reply([row("Kimi", "hooks", "skipped")]))
         XCTAssertTrue(outcome.isEmpty)
     }
 
     func testNothingToInstallStaysEmpty() {
-        XCTAssertTrue(InstallOutcome([]).isEmpty)
+        XCTAssertTrue(InstallOutcome(reply([])).isEmpty)
     }
 
     /// The install never reached the machine. A row that says so beats an empty

@@ -18,6 +18,8 @@
 	<string>%@ 有响应，但返回的不是配对邀请。它的 termiod 可能比本应用旧——重新部署一次。</string>
 	<key>%@ answered, but not with the handshake termiod sends.</key>
 	<string>%@ 有回应，但回的不是 termiod 的握手。</string>
+	<key>%@ arrived on %@ since the last setup. Set up again to install Termio’s hooks there.</key>
+	<string>上次设置之后，%@ 才装到 %@ 上。再设置一次，把 Termio 的 hook 装进去。</string>
 	<key>%@ didn’t come up — check the network and retry</key>
 	<string>%@ 未能启动——请检查网络后重试</string>
 	<key>%@ exited — shell</key>
@@ -880,10 +882,8 @@
 	<string>没有 PR</string>
 	<key>No Session</key>
 	<string>没有会话</string>
-	<key>No agent CLIs found on %@.</key>
-	<string>在 %@ 上未找到任何 Agent 命令行工具。</string>
-	<key>No agent CLIs found.</key>
-	<string>未找到任何 Agent 命令行工具。</string>
+	<key>No agent CLIs on %@ yet. Install one there and it shows up here.</key>
+	<string>%@ 上还没有 Agent 命令行工具。在那台机器上装一个，这里就会显示。</string>
 	<key>No bundled tool to install from.</key>
 	<string>应用包中没有可安装的工具。</string>
 	<key>No command to run.</key>
@@ -1684,6 +1684,8 @@
 	<string>缩放拆分</string>
 	<key>`%@` is on your PATH. Run `%@ sessions …` to drive sibling sessions, or `%@ .` to open a folder.</key>
 	<string>`%@` 已在 PATH 中。运行 `%@ sessions …` 可驱动其他会话，运行 `%@ .` 可打开文件夹。</string>
+	<key>`termiod` on %@ isn’t answering.</key>
+	<string>%@ 上的 `termiod` 没有响应。</string>
 	<key>agents</key>
 	<string>个 Agent</string>
 	<key>binary</key>

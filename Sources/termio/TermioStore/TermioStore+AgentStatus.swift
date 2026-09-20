@@ -79,8 +79,14 @@ extension TermioStore {
             settings.agentHooksEnabled ? .install : .remove
         let skills: Termiod.AgentHalfAction =
             settings.sessionControlEnabled ? .install : .remove
+        // Read out of the store *before* the task, the way the two half-actions
+        // above already are. This runs from `init`, and reaching back into an
+        // observable object from inside the task is the kind of re-entrancy that
+        // only shows up later, somewhere else.
+        let commands = settings.authoredCommands()
         Task {
-            let outcome = await AgentIntegrationInstaller.sync(hooks: hooks, skills: skills)
+            let outcome = await AgentIntegrationInstaller.sync(
+                hooks: hooks, skills: skills, commands: commands)
             // Stamped for the same reason a machine's pane stamps after its own
             // install: the stamp is what "Not installed on This Mac" reads, and
             // this is the only thing that ever puts the files here. Unstamped, the
@@ -91,7 +97,8 @@ extension TermioStore {
             // asked for, so there is nothing to claim this build did.
             guard outcome.failure == nil, outcome.failed.isEmpty, !outcome.isEmpty else { return }
             DeviceStateCache.stampIntegration(
-                AppInfo.buildStamp, for: KnownDevice.thisMac.settingsKey)
+                AppInfo.buildStamp, covering: outcome.coveredIDs,
+                for: KnownDevice.thisMac.settingsKey)
         }
     }
 

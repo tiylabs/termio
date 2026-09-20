@@ -52,6 +52,7 @@ from the real front matter).
 | active | rfc | [可扩展 Agent —— 配置化定义 + 配置化 Hook](design/20260707-agent-extensibility.md) |
 | active | rfc | [Agent integration moves into termiod](design/20260825-agent-integration-moves-to-termiod.md) |
 | active | rfc | [One path — local sessions run through termiod too](design/20260817-one-path-local-through-termiod.md) |
+| active | rfc | [One place decides what paste means](design/20260919-one-place-decides-what-paste-means.md) |
 | active | rfc | [PTY size is not the write token](design/20260901-pty-size-is-not-the-write-token.md) |
 | active | rfc | [Push-to-talk voice dictation — hold the space bar (iOS shipped, OpenAI)](design/20260704-push-to-talk-voice-dictation.md) |
 | active | rfc | [Unify the server plane in Rust, reduce the Mac app to a viewer](design/20260819-unify-server-plane.md) |
@@ -75,13 +76,13 @@ from the real front matter).
 | archived | rfc | [Device RFC blocking decisions](design/20260814-remote-to-device.decisions.md) |
 | archived | rfc | [Review — One path, local sessions run through termiod too](design/20260817-one-path-local-through-termiod.review-claude.md) |
 | archived | rfc | [RFC: Per-project agent sandbox (Apple Seatbelt)](design/20260630-sandbox-seatbelt.md) |
-| done | bug | ["Resize stubs: five fixes, and the witness that lied"](bug/resize-keyframe-grid-race-HANDOFF.md) |
 | done | bug | [Agent welcome banner frozen into a narrow column when a session opens in a wide window](bug/terminal-narrow-grid-frozen-banner-on-open.md) |
 | done | bug | [HANDOFF: a pane renders at the wrong grid while a phone is attached](bug/phone-attached-resize-HANDOFF.md) |
 | done | bug | [HANDOFF: terminal content does not reflow on window resize](bug/terminal-resize-no-reflow-HANDOFF.md) |
 | done | bug | [iOS terminal fails "unauthorized" while the session list works (companion over tunnel)](bug/companion-terminal-unauthorized-over-tunnel.md) |
 | done | bug | [New terminal opens unfocused (hollow cursor, beeps until clicked)](bug/terminal-focus-loss-on-new-session-mount.md) |
 | done | bug | [Resize mojibake: one symptom, eleven causes](bug/window-drag-resize-artifacts-HANDOFF.md) |
+| done | bug | [Resize stubs: five fixes, and the witness that lied](bug/resize-keyframe-grid-race-HANDOFF.md) |
 | done | bug | [Terminal loses focus after window deactivation](bug/terminal-focus-loss-on-window-key.md) |
 | done | bug | [Terminal loses focus while the window stays key — sibling-render trigger](bug/terminal-focus-loss-on-sibling-render.md) |
 | done | design | [Agent Abstraction & Configuration](design/20260718-agent-abstraction-and-configuration.md) |

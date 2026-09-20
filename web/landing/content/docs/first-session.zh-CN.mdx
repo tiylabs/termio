@@ -3,8 +3,8 @@ title: 你的第一个会话
 description: 打开项目，在真实终端里启动 Agent，再拆分窗口，让开发服务器和一个 shell 并排待在旁边。
 x-i18n:
   source_path: first-session.mdx
-  source_hash: df978b945389ae8708b68c2944a963a4cfc6ed8af24bef2d0c2dec7a38a6772f
-  generated_at: 2026-08-30
+  source_hash: bee796f0d2eba04270f1ff2f36c778d3fe2e20fa5688ba42284a28d1fb562169
+  generated_at: 2026-09-19
 ---
 
 Termio 里的*会话*就是一个真实终端，跑着一件事——一个 Agent、一个开发服务器，或者
@@ -77,6 +77,8 @@ Termio 里的*会话*就是一个真实终端，跑着一件事——一个 Agen
 <Callout type="note">
   结束会话是一件需要你明确去做的事：`⌘W` 关闭当前会话。其余情况——关掉窗口、退出
   Termio、SSH 断线、重启应用——都只是分离，不会杀掉任何东西。
+  [什么会留下来](/zh-CN/docs/persistence)把每种情况都摆了出来，包括那些确实会让你赔上
+  一个进程的。
 </Callout>
 
 ## 下一步
@@ -91,7 +93,7 @@ Termio 里的*会话*就是一个真实终端，跑着一件事——一个 Agen
   <Card href="/zh-CN/docs/inspector" title="检查器">
     在终端旁边浏览文件、读差异、搜索项目。
   </Card>
-  <Card href="/zh-CN/docs/iphone" title="iPhone 伴侣应用">
+  <Card href="/zh-CN/docs/iphone" title="iOS 应用">
     用手机查看正在运行的会话。
   </Card>
 </Cards>

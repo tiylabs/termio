@@ -33,11 +33,15 @@ A minimal manifest needs only an `id`, a `name`, and the `command` to launch:
 }
 ```
 
-Termio reads the folder **once at launch**, so restart the app after adding or
-editing a manifest. The agent then shows up wherever you start a session; enable
-or reorder it from **Settings ▸ Agents** like any other. Where its CLI lives is a
-fact about a machine, so the command path is set per machine: pick the machine at
-the top of the Agents pane.
+Termio reads the folder at launch and again whenever you bring the app forward
+with Agents settings open, so a new manifest usually appears without a restart.
+The agent then shows up wherever you start a session; enable or reorder it from
+**Settings ▸ Agents** like any other.
+
+Where its CLI lives is a fact about a machine, so the command path is one row per
+machine: open the agent under **Settings ▸ Agents** and its **Launch** section
+lists every machine you have, each with its own path field. See [Remote
+hosts](/docs/remote-hosts) for the same rows read from a machine’s side.
 
 <DocsImage
   src="/screenshots/docs/26-custom-agent.png"

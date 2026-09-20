@@ -712,6 +712,28 @@ final class AppSettings: ObservableObject {
         return "\(command) \(flag)"
     }
 
+    /// What each listed agent launches with on `device`, by id: the path the
+    /// user authored where they authored one, the manifest's default otherwise.
+    ///
+    /// Sent with every install and probe, because the daemon has to judge
+    /// presence against the binary a session would really run. Settings lets a
+    /// path be anywhere — an agent deliberately kept off `PATH` is the whole
+    /// reason to type one — and judging it by the manifest's bare command
+    /// answers "not here" for a CLI the app has just reported available.
+    /// The **whole catalog**, not the user's list: the probe asks about every
+    /// agent because coverage is a fact about the machine, and the daemon
+    /// installs against its own catalog. Handing the install a smaller map than
+    /// the probe used is how an unlisted agent with an authored path got probed
+    /// as present and then skipped by the install that was told to cover it.
+    func authoredCommands(on device: KnownDevice = .thisMac) -> [String: String] {
+        var commands: [String: String] = [:]
+        for agent in AgentPreset.codingAgents {
+            guard let command = command(for: agent, on: device) else { continue }
+            commands[agent.rawValue] = command
+        }
+        return commands
+    }
+
     /// The arguments the user authored for this agent, or `nil` when they never
     /// set any — the same empty-means-unset rule the command path follows, which
     /// is what keeps a cleared field out of `settings.json`.

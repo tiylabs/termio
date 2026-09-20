@@ -377,6 +377,7 @@ pub async fn install_agents(
         skills: request.skills,
         reporter: request.reporter,
         hook_version: Some(request.hook_version),
+        commands: request.commands,
         seq: Some(1),
     };
     match request_with_capabilities(&control, &["agents"]).await? {

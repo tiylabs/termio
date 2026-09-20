@@ -50,7 +50,8 @@ Three properties matter:
   the ones on this Mac — runs inside `termiod`, the session host, and the app is
   a viewer that attaches to it. Closing the window leaves the agent working, and
   a dropped SSH connection detaches you rather than killing anything. Only
-  **Close Session** ends one on purpose.
+  **Close Session** ends one on purpose. [What survives](/docs/persistence) is
+  the full table.
 - **A session is addressable.** Every session has a stable URL,
   `termio://session/<uuid>`, which is what the menu-bar tray, a notification, and
   the `termio` CLI all use to bring one to the front.

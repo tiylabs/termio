@@ -1,0 +1,184 @@
+---
+title: Remote hosts
+description: The operational half of running agents on another box — adding a host, testing the route, why a password isn’t enough, what Set Up actually installs, and how to read the one line that says whether a machine is ready.
+---
+
+[Devices](/docs/devices) is the model: a machine is a machine you can `ssh` to,
+and everything files under it. This page is the operating manual for the pane
+that does the work — **Settings ▸ Remote Hosts**, one row per machine, each
+opening onto that machine’s own page.
+
+The shape is worth knowing before the details. A machine is two things at once:
+a **route** (how you reach it) and an **identity** (what’s installed on it). You
+can’t install anything on a box you can’t reach, so the pane reads in that
+order, and so does everything below.
+
+## Adding a host
+
+Termio reads `~/.ssh/config` and never rewrites it behind your back. Anything you
+can already `ssh` to is a machine Termio can reach — there is nothing to import.
+
+- **File ▸ Connect to…** lists the aliases in your config Termio hasn’t worked on
+  yet. Picking one opens a terminal there.
+- **Add Host…** — at the end of **File ▸ New SSH Connection**, and on the Remote
+  Hosts pane — appends a `Host` block for a box that isn’t in your config yet. Lead with the
+  address; the name is what you’ll type after `ssh`. If your other hosts already
+  share a user and a key, that pair is offered rather than retyped.
+
+A host you add this way is an ordinary `~/.ssh/config` entry afterwards. The
+machine’s page carries a **Host block ▸ Edit** row that opens the entry it was
+defined in, so the config stays the one place the answer lives.
+
+## Testing the route
+
+The **Reached by** section names the destination and says how `ssh` will sign in
+— either the key your config pins, or “the keys `ssh` offers on its own”. Beside
+it is a **Test** button. It reports one of four outcomes, the last of which
+carries `ssh`’s own reason rather than a fixed label:
+
+| Outcome | What it means |
+| --- | --- |
+| Reachable | `ssh` connected and authenticated. Nothing to fix. |
+| Wants a password | The host offered password auth. The one failure with a one-click fix — see below. |
+| Auth failed | It answered, and refused the credentials. A key problem, not a network one. |
+| The reason `ssh` gave | Everything else — refused, timed out, unknown host — reported in `ssh`’s words. |
+
+Test with the machine’s own alias, the same way the rest of the app reaches it.
+If `ssh mybox` fails in your terminal, this will fail too — Termio carries no
+credentials of its own.
+
+## Why a password isn’t enough
+
+A host that takes a password will let you open a plain terminal and nothing else.
+The connections that carry sessions, the file tree, search, and the git panes all run non-interactively
+(`BatchMode=yes`), which means they can never answer a prompt. A password works
+exactly where a human is sitting there to type it, and fails everywhere else.
+
+So the pane says that plainly and offers the fix in place: **Set Up Key…** runs
+`ssh-copy-id` in a terminal with the key Termio would use. The host asks for your
+password once, there, and from then on every path can reach it. If `~/.ssh` has
+no key `ssh` would offer on its own, the row says so and points at `ssh-keygen`
+first.
+
+<Callout type="note">
+  The key is yours and the command is the standard one. Termio never stores a
+  password, never embeds an SSH implementation, and never writes a credential
+  anywhere but where `ssh` and your keychain already keep them.
+</Callout>
+
+## Setting it up
+
+Getting a box ready is a real dependency chain — put the server there, find out
+which agent CLIs it has, write Termio’s hooks and skill into them. Showing that
+as four independent states would turn picking a machine into infrastructure
+triage, so the pane promises **one outcome** and keeps the rungs underneath it:
+
+| The line says | What it means |
+| --- | --- |
+| **Set up this host** | Nothing asked yet, or a rung is blocking. Press **Set Up**. |
+| **Checking…** | It’s running, and names the rung it’s on. |
+| **Ready** | Agents on that machine can run — and, with the integration switches on, report their status back here. |
+| **Update ready** | A newer server is staged, and the running one is holding it off because it has work in progress. |
+
+Pressing **Set Up** walks the ladder: copy `termiod` into `~/.local/bin` over
+SSH, probe for your agent CLIs, then bring the hooks and the skill into line with
+what the switches on **Settings ▸ Agents** ask for — installing each half, or
+removing it, per switch. With both off it deliberately installs neither, and the
+line then promises only that agents there can run. No root, no package manager,
+nothing added to your shell profile.
+
+When a rung fails, the line names **that rung** rather than “setup failed” — and
+only the first one. A machine with no `termiod` also has no hooks, and naming
+both invites you to fix the consequence instead of the cause.
+
+<Callout type="tip">
+  An agent CLI that isn’t installed there doesn’t block **Ready**. It’s a fact
+  about that agent, not a fault in the machine — the machine is ready to run the
+  agents it actually has.
+</Callout>
+
+## Agents on that box
+
+A remote machine’s page carries an **Agents** link — “what does *this box*
+have” — which is the same question as **Settings ▸ Agents** asked from the other
+axis. Opening it gives you:
+
+- **Command paths.** One row per agent, each with the machine’s own answer
+  underneath: *Installed*, *Not installed*, or *Can’t check*. Leave a path empty
+  to launch the agent the way that machine’s login shell would; fill it in
+  (`/opt/homebrew/bin/codex`) when the binary lives somewhere the profile doesn’t
+  add. Which agents appear at all is still **Settings ▸ Agents**.
+- **Installed by Termio.** What Termio wrote into each agent’s config on that
+  machine — **Hooks** (so agents report their status) and the **Skill**. One
+  **Reinstall Hooks and Skill** button repairs both; reach for it after
+  hand-editing one, or when a status dot stops moving.
+
+  The skill a box gets is not the one this Mac gets. Agents here learn
+  `termio sessions`, scoped to their own project; agents on a machine learn
+  `termiod list`, `create`, `send` and `kill`, scoped to that whole machine —
+  because that is the command that exists there.
+
+*Can’t check* is a third answer on purpose, and it’s never a defect in the agent:
+it means Termio couldn’t reach the machine to ask. Reporting that as “not
+installed” would send you to reinstall a CLI that’s already there; reporting it
+as “installed” would promise a launch that can’t happen.
+
+<Callout type="note">
+  Both switches themselves — **Live agent status** and **Session control** — live
+  on **Settings ▸ Agents**, because wanting the feature is a preference. Where it
+  gets installed is a machine operation, which is why it happens here, per
+  machine. See [Status hooks & session control](/docs/session-control).
+</Callout>
+
+## Keeping a host current
+
+The same **Set Up** button is the update. It works from any state — nothing
+installed, an older build, a build the running daemon hasn’t picked up yet — and
+it puts the old binary back if the new one doesn’t answer. The machine’s page
+shows the version it’s actually running.
+
+An update that would interrupt work in progress doesn’t take it. The line reads
+**Update ready**, names the session holding it up, and offers **Update Anyway**
+beside it. Left alone, the new build takes over the next time the daemon stops on
+its own. Your idle terminals never hold an update back; a command still running
+or an agent mid-task does.
+
+From the command line the same reconcile is one verb:
+
+```bash
+termiod deploy --host mybox
+```
+
+It ends in the same state whatever state it started in, so running it against a
+box that looks wrong is safe. See [The Termio server](/docs/server).
+
+## When a host stops answering
+
+Work from the outside in — `ssh` first, then the daemon, then Termio:
+
+```bash
+ssh mybox true                 # does SSH itself work?
+termiod list --host mybox      # is the server answering there?
+termiod deploy --host mybox    # reinstall and verify it
+```
+
+A dropped connection detaches you; it doesn’t kill anything. The sessions are on
+that box, in its daemon, and reattaching restores the screen — see [What
+survives](/docs/persistence). If they really did go away after a reboot, the box
+is missing a service: `termiod service install`.
+
+The device switcher reports an unreachable machine in `ssh`’s own words rather
+than going quiet, so the failure you read is the failure `ssh` had. More symptoms
+and their checks are in [Troubleshooting](/docs/troubleshooting).
+
+<Cards>
+  <Card href="/docs/devices" title="Devices">
+    The model: what a machine is, and what reaches across to one.
+  </Card>
+  <Card href="/docs/server" title="The Termio server">
+    `termiod` itself — installing it, keeping it alive, looking at it.
+  </Card>
+  <Card href="/docs/session-control" title="Status hooks & session control">
+    The two switches whose files land on every machine you set up.
+  </Card>
+</Cards>

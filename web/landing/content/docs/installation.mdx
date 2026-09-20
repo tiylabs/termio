@@ -11,6 +11,15 @@ Termio runs on Apple silicon and Intel Macs from the same download. Installation
   CLIs you already have installed — it doesn’t bundle them.
 </Callout>
 
+## What you need
+
+| | |
+| --- | --- |
+| **macOS** | 14 (Sonoma) or later, Apple silicon or Intel — one universal download |
+| **An account** | None. There is no sign-in, no license key, and no payment backend |
+| **Agent CLIs** | Whichever you already use — `claude`, `codex`, and the rest. Termio hosts them, it doesn’t ship them |
+| **For another machine** | Anything you can already `ssh` to. Termio reads your `~/.ssh/config` and installs nothing as root |
+
 ## Download and install
 
 1. Download the latest build from
@@ -26,6 +35,23 @@ Termio runs on Apple silicon and Intel Macs from the same download. Installation
   width={1544}
   height={1024}
 />
+
+## Check it worked
+
+Launch Termio and you should land on the welcome screen with **Open Project** as
+the primary action. That’s the whole install — there is no setup wizard, no
+account step, and nothing to configure before the first session.
+
+On first launch Termio asks once whether to let your agents coordinate — that’s
+**Session control**, which installs a small skill teaching them the
+`termio sessions` commands. **Live agent status**, the hooks behind the sidebar’s
+status dots, is a separate switch on the same tab; the sidebar offers it when it
+sees an agent running. Both are optional and reversible; see [Status hooks &
+session control](/docs/session-control).
+
+If you already use [Ghostty](https://ghostty.org), there’s nothing to pick: Termio
+reads your `~/.config/ghostty/config` on first launch and starts with the font and
+theme you chose there.
 
 ## Install with Homebrew
 
@@ -65,6 +91,35 @@ and turn on **Command-line tool** to symlink `termio` onto your `PATH`. From the
 `termio` in any directory opens it as a project, and `termio sessions …` lets your
 agents coordinate with each other. It’s entirely optional — see
 [Session control & the CLI](/docs/session-control).
+
+## Where Termio keeps things
+
+Nothing is hidden, and nothing lives on a server of ours:
+
+| Path | What’s in it |
+| --- | --- |
+| `~/.termio/` | Your config: `keybindings.json`, custom agent manifests under `config/agents/`, and the `chats/` scratch directory |
+| `~/Library/Application Support/termio/` | App state and your `Themes/` folder |
+| `~/.local/bin/` | The session host on machines you set up over SSH — `termiod`, plus `termio` on Linux. On this Mac it ships inside the app bundle and is never installed here |
+| Each agent’s own config | Termio’s status hooks and its `termio` skill, written per agent |
+
+## Uninstalling
+
+Quit Termio and drag it to the Trash. To remove what it wrote outside the bundle,
+turn off **Live agent status** and **Session control** under **Settings ▸ Agents**
+first — both toggles remove the hooks and the skill they installed on **this
+Mac**, leaving anything you wrote yourself alone. Then delete `~/.termio` and
+`~/Library/Application Support/termio` if you want the state gone too.
+
+Every other machine keeps what was installed on it until you clean it up there.
+Stop the server first, because removing the service alone leaves a daemon that
+something else started still running:
+
+```bash
+termiod stop
+termiod service uninstall
+rm -f ~/.local/bin/termiod ~/.local/bin/termio
+```
 
 ## Next steps
 

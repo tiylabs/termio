@@ -41,24 +41,17 @@ you can already `ssh` to is a machine Termio can reach:
 ## Setting up a machine
 
 Open **Settings ▸ Remote Hosts**, pick the machine, and press **Set Up**. Termio
-copies one binary — `termiod`, the session host — into `~/.local/bin` over SSH.
+copies the session host — `termiod`, plus the `termio` CLI on Linux — into
+`~/.local/bin` over SSH.
 No root, no package manager, nothing to add to your shell profile. It then looks
-for the agent CLIs installed there and writes Termio’s hooks, its config block,
-and its agent skill for each one, so an agent on a VPS reports **working**,
-**needs you**, and **done** exactly the way a local one does.
+for the agent CLIs installed there and writes Termio’s hooks and its agent skill
+for each one, so an agent on a VPS reports **working**, **needs you**, and
+**done** exactly the way a local one does.
 
-The same button is also the update. It works from any state — nothing installed,
-an older build, a build the running daemon hasn’t picked up yet — and it puts
-the old binary back if the new one doesn’t answer. A machine’s pane shows the
-version it runs.
-
-An update that would interrupt work in progress says so and names the session,
-with **Update Anyway** beside it. Your own idle terminals never block an update;
-a command still running or an agent mid-task does.
-
-Under **Installed by Termio**, the daemon, the hooks, and the skill each get
-their own **Reinstall** row. A reinstall replaces the hooks Termio put there and
-leaves any you wrote yourself alone.
+The same button is the update, and the machine’s page reduces the whole chain to
+one line — *Ready*, *Set up this host*, or *Update ready*. [Remote
+hosts](/docs/remote-hosts) is the operating manual: testing the route, why a
+password isn’t enough, what each rung installs, and how to repair one.
 
 <Callout type="note" title="What Termio does not do">
   Termio never provisions a machine, never runs a control plane, and never
@@ -93,8 +86,9 @@ the project is on:
 - **Changes, Compare, History** — the git pane reads that machine’s repository,
   and stays as read-only there as it is here.
 - **Agents** — the same manifests, hooks, and skill, installed on the box.
-  **Settings ▸ Agents** carries a device scope, so where an agent’s CLI lives is
-  answered per machine.
+  Where an agent’s CLI lives is a fact about one machine, so it’s answered on
+  that machine’s own page under **Remote Hosts** rather than on a page about
+  agents.
 - **Paste an image** into an agent running on the machine and Termio carries the
   file across.
 
@@ -103,13 +97,16 @@ something with `termiod`, and the sidebar files it as an ordinary session. The
 machine’s own roster is the source, so nothing running on the box goes missing.
 
 <Cards>
+  <Card href="/docs/remote-hosts" title="Remote hosts">
+    Adding a host, testing the route, and reading the one line that says ready.
+  </Card>
   <Card href="/docs/workspaces" title="Workspaces">
     The scope that decides which machine a project opens on.
   </Card>
   <Card href="/docs/session-control" title="Session control & the CLI">
     The hooks that make status honest, on this Mac and on every machine.
   </Card>
-  <Card href="/docs/iphone" title="The iPhone companion">
+  <Card href="/docs/iphone" title="The iOS app">
     Pair the phone with a machine and reach its sessions from anywhere.
   </Card>
 </Cards>

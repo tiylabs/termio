@@ -118,16 +118,104 @@ struct DeviceDiscoveredState: Codable, Equatable {
     /// (`AppInfo.buildStamp`), or `nil` if none has. See
     /// `carriesCurrentIntegration` for why this is stamped rather than re-derived.
     var integrationVersion: String?
+    /// Which agents that install actually covered, by `AgentPreset.rawValue`.
+    ///
+    /// Both halves write only for agents whose CLI is on the machine, so an
+    /// agent installed *after* a setup has no hooks and reports nothing — a
+    /// silent gap, since the version stamp alone still reads as current. This is
+    /// what lets a later probe notice it.
+    ///
+    /// `nil` means a build that did not record it. Read as "covered everything"
+    /// rather than "covered nothing": crying wolf on every machine in the roster
+    /// the moment this ships is the worse error, and the next app update moves
+    /// the stamp anyway, which is what fills this in.
+    var integrationAgents: [String]?
 
     init(
         checkedAt: Date, reachable: Bool, termiodVersion: String? = nil,
-        agents: [String: String] = [:], integrationVersion: String? = nil
+        agents: [String: String] = [:], integrationVersion: String? = nil,
+        integrationAgents: [String]? = nil, daemonAnswered: Bool = true
     ) {
         self.checkedAt = checkedAt
         self.reachable = reachable
         self.termiodVersion = termiodVersion
         self.agents = agents
         self.integrationVersion = integrationVersion
+        self.integrationAgents = integrationAgents
+        self.daemonAnswered = daemonAnswered
+    }
+
+    /// Everything **but** `daemonAnswered`, which is why this is spelled out
+    /// rather than synthesized. Listing the keys is also what lets the property
+    /// keep its default: Swift's synthesized decoder does not apply property
+    /// defaults to a key it is asked to decode, so a field outside `CodingKeys`
+    /// is the only shape that both stays off disk and survives an older file.
+    private enum CodingKeys: String, CodingKey {
+        case checkedAt, reachable, termiodVersion, agents
+        case integrationVersion, integrationAgents
+    }
+
+    /// Whether the daemon answered the agent probe. `false` is a machine that ssh
+    /// reached but whose `termiod` could not be asked — an old daemon, or one
+    /// that will not start.
+    ///
+    /// Separate from `reachable` because the repair is different: an unreachable
+    /// box is a network or ssh problem, while this one is fixed by deploying the
+    /// daemon again.
+    ///
+    /// **Never persisted** — see `CodingKeys`. It is a fact about the probe that
+    /// just ran, and this file is explicitly not authoritative. Written to disk
+    /// it goes stale in both directions: a machine whose daemon has since
+    /// recovered reads as broken forever (no successful install can clear a flag
+    /// it never sets), and the seed a pane takes from the cache on open would
+    /// report a fault nobody has re-confirmed.
+    var daemonAnswered = true
+
+    /// The agents this machine answered *available* for, sorted so a stamp is
+    /// stable across probes. What an install covers, and what a later probe
+    /// compares against.
+    var availableAgents: [String] {
+        agents.filter { $0.value == AgentReadiness.available.rawValue }.keys.sorted()
+    }
+
+    /// Records what an install covered: **everything the machine had at the
+    /// time**, from a probe that ran beside it.
+    ///
+    /// Presence is the primitive, not the install's own rows. Rows undercount in
+    /// ways that have nothing to do with an agent being here: three catalog
+    /// agents ship no hook spec at all, two share one skills directory and the
+    /// second is deduplicated away, and with both switches off there are no rows
+    /// whatsoever. Any of those would leave an installed agent outside its own
+    /// coverage and ask the user to set the machine up again, forever.
+    ///
+    /// The probe covers the whole catalog rather than the user's list, so an
+    /// agent that was here but unlisted is already covered on the day it is
+    /// listed — it was wired all along.
+    /// `present` is the machine's own answer, carried back by the install that
+    /// just ran (`InstallOutcome.coveredIDs`). A set taken from any other probe
+    /// is a different question asked at a different moment: the client's can
+    /// time out into "everything is here" while the install that follows gets a
+    /// real answer and skips half of them, and the coverage recorded then claims
+    /// agents that were never wired.
+    ///
+    /// `nil` — a daemon too old to report it — leaves the record alone rather
+    /// than writing "nothing is covered".
+    mutating func recordCoverage(present: [String]?) {
+        guard let present else { return }
+        integrationAgents = present.sorted()
+    }
+
+    /// Carries a previous probe's integration record onto this fresh one.
+    ///
+    /// A probe asks what is on the machine; it does not un-install what a setup
+    /// put there. The record is **two** fields, and carrying one while forgetting
+    /// the other is worse than forgetting both: an `integrationAgents` dropped to
+    /// `nil` reads as "covered everything", so a refresh would quietly erase the
+    /// only thing that can notice an agent installed after setup. One call, so
+    /// there is no second place to forget.
+    mutating func carryIntegration(from previous: DeviceDiscoveredState?) {
+        integrationVersion = previous?.integrationVersion
+        integrationAgents = previous?.integrationAgents
     }
 
     func readiness(for agent: AgentPreset) -> AgentReadiness {
@@ -189,9 +277,17 @@ enum DeviceStateCache {
     /// saying so rather than nothing. It learned nothing about which agent CLIs
     /// are there, so `agents` stays empty and every row on that machine keeps
     /// reading `unknown` until something actually asks.
-    static func stampIntegration(_ version: String?, for key: String) {
+    /// Records an install against a present set its caller just took. This is
+    /// the this-Mac path, where a probe is one cached `PATH` lookup away, so
+    /// there is no excuse for stamping a set the machine may have outgrown.
+    static func stampIntegration(_ version: String?, covering present: [String]?, for key: String) {
         var state = load(key) ?? DeviceDiscoveredState(checkedAt: Date(), reachable: true)
         state.integrationVersion = version
+        if version == nil {
+            state.integrationAgents = nil
+        } else {
+            state.recordCoverage(present: present)
+        }
         save(state, for: key)
     }
 }

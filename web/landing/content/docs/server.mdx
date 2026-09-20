@@ -4,7 +4,7 @@ description: What runs on a machine so sessions outlive the app — how termiod 
 ---
 
 Every session runs inside `termiod`, the Termio server, on the machine that owns
-it — including the ones on this Mac. The app, the iPhone companion and the CLI
+it — including the ones on this Mac. The Mac app, the iOS app and the CLI
 are all *viewers*: they attach to a session and detach from it. Nothing about a
 session belongs to the window you were looking at.
 
@@ -56,7 +56,9 @@ termiod handoff
 ```
 
 That is also what happens when the app updates itself — the reason a Termio
-update does not cost you your running agents.
+update does not cost you your running agents. See [What
+survives](/docs/persistence) for every case, including the ones a handoff cannot
+cover.
 
 ## Looking at it
 

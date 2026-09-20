@@ -18,6 +18,8 @@
 	<string>%@ answered, but not with a pairing invite. Its termiod is probably older than this app — deploy it again.</string>
 	<key>%@ answered, but not with the handshake termiod sends.</key>
 	<string>%@ answered, but not with the handshake termiod sends.</string>
+	<key>%@ arrived on %@ since the last setup. Set up again to install Termio’s hooks there.</key>
+	<string>%@ arrived on %@ since the last setup. Set up again to install Termio’s hooks there.</string>
 	<key>%@ didn’t come up — check the network and retry</key>
 	<string>%@ didn’t come up — check the network and retry</string>
 	<key>%@ exited — shell</key>
@@ -880,10 +882,8 @@
 	<string>No Pull Requests</string>
 	<key>No Session</key>
 	<string>No Session</string>
-	<key>No agent CLIs found on %@.</key>
-	<string>No agent CLIs found on %@.</string>
-	<key>No agent CLIs found.</key>
-	<string>No agent CLIs found.</string>
+	<key>No agent CLIs on %@ yet. Install one there and it shows up here.</key>
+	<string>No agent CLIs on %@ yet. Install one there and it shows up here.</string>
 	<key>No bundled tool to install from.</key>
 	<string>No bundled tool to install from.</string>
 	<key>No command to run.</key>
@@ -1684,6 +1684,8 @@
 	<string>Zoom Split</string>
 	<key>`%@` is on your PATH. Run `%@ sessions …` to drive sibling sessions, or `%@ .` to open a folder.</key>
 	<string>`%@` is on your PATH. Run `%@ sessions …` to drive sibling sessions, or `%@ .` to open a folder.</string>
+	<key>`termiod` on %@ isn’t answering.</key>
+	<string>`termiod` on %@ isn’t answering.</string>
 	<key>agents</key>
 	<string>agents</string>
 	<key>binary</key>

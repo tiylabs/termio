@@ -965,8 +965,9 @@ extension Termiod {
         hooks: Termiod.AgentHalfAction,
         skills: Termiod.AgentHalfAction,
         reporter: Termiod.AgentHookReporter,
-        hookVersion: String
-    ) throws -> [Termiod.AgentInstallResult] {
+        hookVersion: String,
+        commands: [String: String]
+    ) throws -> Termiod.AgentsInstalledPayload {
         try withControlChannel(route: route, caps: [agentCapability]) { transport, handshake in
             guard handshake.capabilities.contains(agentCapability) else {
                 throw TermiodClientError.requestFailed(
@@ -976,13 +977,13 @@ extension Termiod {
                 transport.writeDescriptor, kind: .control,
                 payload: installAgentsPayload(
                     agents: agents, hooks: hooks, skills: skills,
-                    reporter: reporter, hookVersion: hookVersion))
+                    reporter: reporter, hookVersion: hookVersion, commands: commands))
             while true {
                 let frame = try readFrame(transport.readDescriptor)
                 guard frame.kind == .control else { continue }
                 switch try decodeControl(frame.payload) {
                 case .agentsInstalled(let payload):
-                    return payload.results
+                    return payload
                 case .error(let payload):
                     throw TermiodClientError.requestFailed(payload.message)
                 default:
@@ -995,7 +996,7 @@ extension Termiod {
     /// Which of these agents' CLIs are on that machine. One round trip for the
     /// whole roster, where the SSH arm paid one per agent.
     static func probeAgents(
-        route: TermiodRoute, agents: [String]?
+        route: TermiodRoute, agents: [String]?, commands: [String: String]
     ) throws -> [Termiod.AgentPresence] {
         try withControlChannel(route: route, caps: [agentCapability]) { transport, handshake in
             guard handshake.capabilities.contains(agentCapability) else {
@@ -1004,7 +1005,7 @@ extension Termiod {
             }
             try writeFrame(
                 transport.writeDescriptor, kind: .control,
-                payload: probeAgentsPayload(agents: agents))
+                payload: probeAgentsPayload(agents: agents, commands: commands))
             while true {
                 let frame = try readFrame(transport.readDescriptor)
                 guard frame.kind == .control else { continue }

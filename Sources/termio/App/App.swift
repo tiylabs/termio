@@ -154,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // The ghostty-style right-click menu over the terminal surfaces (Copy/Paste + splits);
     // owns the rightMouseDown monitor for the app's lifetime.
     private var terminalContextMenu: TerminalContextMenu?
-    private var termiodImagePaste: TermiodImagePaste?
+    private var pasteInterceptor: TermiodPasteInterceptor?
     // The pane drag-to-rearrange gesture (issue #183); owns its
     // mouse monitors for the app's lifetime.
     private var paneDragRearrange: PaneDragRearrange?
@@ -434,8 +434,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
         // Installed before the context menu so the menu can hand its Paste to
         // the same interceptor rather than growing a second copy of the rule.
-        termiodImagePaste = TermiodImagePaste(store: store)
-        terminalContextMenu = TerminalContextMenu(store: store, imagePaste: termiodImagePaste)
+        pasteInterceptor = TermiodPasteInterceptor(store: store)
+        terminalContextMenu = TerminalContextMenu(store: store, pasteInterceptor: pasteInterceptor)
         paneDragRearrange = PaneDragRearrange(store: store)
 
         menuBar = MenuBarController(store: store) { [weak self] id in
@@ -1431,6 +1431,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    /// Edit ▸ Paste. File URLs copied in Finder become absolute paths at the
+    /// focused terminal; everything else goes down the responder chain as a
+    /// normal `paste:`. A distinct selector so forwarding `paste:` cannot
+    /// re-enter this method.
+    @objc func pasteFromEditMenu(_ sender: Any?) {
+        if pasteInterceptor?.pasteIntoFocusedTerminal() == true { return }
+        NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: sender)
+    }
+
     /// ⌘F: broadcast so any on-screen file editor opens its find bar.
     @objc func showEditorFindBar(_ sender: Any?) {
         NotificationCenter.default.post(name: .termioShowFindBar, object: nil)
@@ -2321,8 +2330,9 @@ extension AppDelegate: NSMenuDelegate {
 
 extension AppDelegate: NSMenuItemValidation {
     /// Auto-enablement for menu items targeting the delegate: the Session
-    /// cycling verbs need sessions to cycle, and the branch verbs a selected
-    /// session inside a real git project. Every other action stays enabled,
+    /// cycling verbs need sessions to cycle, the branch verbs a selected
+    /// session inside a real git project, and Edit ▸ Paste the same
+    /// enablement `paste:` would have had. Every other action stays enabled,
     /// matching the pre-validation behavior.
     func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
         switch menuItem.action {
@@ -2330,9 +2340,31 @@ extension AppDelegate: NSMenuItemValidation {
             return !store.sidebarSessionGroups.isEmpty
         case #selector(newWorktree(_:)), #selector(newPullRequest(_:)):
             return currentBranchProject != nil
+        case #selector(pasteFromEditMenu(_:)):
+            return validateOrdinaryPaste(menuItem)
         default:
             return true
         }
+    }
+
+    /// Same enablement `paste:` would have had: a text field still dims when
+    /// the pasteboard is empty, a terminal stays enabled, and nothing that
+    /// doesn't implement `paste:` lights up just because this item is ours.
+    private func validateOrdinaryPaste(_ menuItem: NSMenuItem) -> Bool {
+        guard let target = NSApp.target(
+            forAction: #selector(NSText.paste(_:)), to: nil, from: menuItem)
+        else { return false }
+        let probe = NSMenuItem(
+            title: menuItem.title,
+            action: #selector(NSText.paste(_:)),
+            keyEquivalent: menuItem.keyEquivalent)
+        if let validator = target as? NSMenuItemValidation {
+            return validator.validateMenuItem(probe)
+        }
+        if let validator = target as? NSUserInterfaceValidations {
+            return validator.validateUserInterfaceItem(probe)
+        }
+        return true
     }
 }
 
@@ -3344,7 +3376,12 @@ private func buildMainMenu() -> NSMenu {
     let editMenu = NSMenu(title: localized("Edit"))
     editMenu.addItem(withTitle: localized("Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x")
     editMenu.addItem(withTitle: localized("Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c")
-    editMenu.addItem(withTitle: localized("Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+    // Distinct from `paste:` so a file-URL intercept can run first, then
+    // forward the ordinary selector without re-entering this item.
+    editMenu.addItem(
+        withTitle: localized("Paste"),
+        action: #selector(AppDelegate.pasteFromEditMenu(_:)),
+        keyEquivalent: "v")
     editMenu.addItem(withTitle: localized("Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
     editMenu.addItem(.separator())
     // Edit ▸ Find, where every Mac app keeps it, on the keys people already have in their

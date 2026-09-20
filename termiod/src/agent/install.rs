@@ -27,7 +27,7 @@
 use super::machine;
 use super::manifest::{AgentCatalog, AgentDefinition, HookDialect, HookEvent, HookSpec, HookType};
 use serde::{Deserialize, Serialize};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 /// The substring that identifies a *legacy* raw-socket entry as termio's — the
@@ -134,6 +134,10 @@ pub struct InstallRequest {
     /// resolved once here rather than per command. Six dialects embed it, in two
     /// escaping contexts, and they must all name the same file.
     binary: String,
+    /// What each agent launches with here, by id, when the client knows better
+    /// than the manifest — the path the user authored in Settings. Empty from a
+    /// client that does not send it.
+    pub commands: HashMap<String, String>,
 }
 
 impl InstallRequest {
@@ -143,6 +147,7 @@ impl InstallRequest {
         skills: HalfAction,
         reporter: Reporter,
         hook_version: String,
+        commands: HashMap<String, String>,
     ) -> InstallRequest {
         let binary = machine::daemon_binary();
         InstallRequest {
@@ -152,6 +157,7 @@ impl InstallRequest {
             reporter,
             hook_version,
             binary,
+            commands,
         }
     }
 
@@ -231,7 +237,17 @@ pub struct AgentPresence {
 }
 
 /// Answer for the named agents, or for the whole catalog.
-pub fn probe(agents: Option<Vec<String>>) -> Vec<AgentPresence> {
+pub fn probe(
+    agents: Option<Vec<String>>,
+    commands: HashMap<String, String>,
+) -> Vec<AgentPresence> {
+    machine::with_fresh_login_shell(|| probe_against_shell(agents, commands))
+}
+
+fn probe_against_shell(
+    agents: Option<Vec<String>>,
+    commands: HashMap<String, String>,
+) -> Vec<AgentPresence> {
     let catalog = AgentCatalog::load();
     let wanted: Option<HashSet<&str>> = agents
         .as_ref()
@@ -243,25 +259,86 @@ pub fn probe(agents: Option<Vec<String>>) -> Vec<AgentPresence> {
         .map(|agent| AgentPresence {
             id: agent.id.clone(),
             command: agent.command.clone(),
-            present: match agent.command.as_deref() {
-                Some(command) => machine::is_command_installed(command),
-                None => true,
-            },
+            present: is_present(agent, &commands),
         })
         .collect()
 }
 
+/// Whether this agent's CLI is on this box.
+///
+/// `true` for an agent that declares no command, and `true` when the probe could
+/// not look — the don't-cry-wolf rule `machine::is_command_installed` carries.
+/// One function because the answer decides three things: what a probe reports,
+/// and whether each half of the install writes anything. Two spellings of it
+/// were how the halves came to disagree.
+///
+/// `authored` wins over the manifest where the client sent one. Settings lets
+/// the user point an agent at a path that is not on `PATH` at all, and judging
+/// that agent by the manifest's bare command answers "not here" for a CLI the
+/// client has just reported available — so the client says available and this
+/// box silently refuses to write its config.
+fn is_present(agent: &AgentDefinition, authored: &HashMap<String, String>) -> bool {
+    let command = authored
+        .get(&agent.id)
+        .map(String::as_str)
+        .filter(|command| !command.trim().is_empty())
+        .or(agent.command.as_deref());
+    match command {
+        Some(command) => machine::is_command_installed(command),
+        None => true,
+    }
+}
+
+/// What one install did, and what this box had while it did it.
+pub struct InstallReport {
+    pub results: Vec<InstallResult>,
+    /// The agents judged present for **this** install, by id.
+    ///
+    /// Reported rather than left for the client to guess, because only this side
+    /// knows it. A client that probes separately is asking a different question
+    /// at a different moment: its probe can time out into "everything is here"
+    /// while the install that follows gets a real answer and skips half of them,
+    /// and the coverage recorded then claims agents that were never wired.
+    pub present: Vec<String>,
+}
+
 /// Apply `request` against this box's filesystem.
-pub fn run(request: &InstallRequest) -> Vec<InstallResult> {
+///
+/// The whole install runs against one login-shell answer: which agents are here
+/// *and* where each one keeps its config come from the same environment, and a
+/// concurrent probe cannot change it underneath.
+pub fn run(request: &InstallRequest) -> InstallReport {
+    machine::with_fresh_login_shell(|| run_against_shell(request))
+}
+
+fn run_against_shell(request: &InstallRequest) -> InstallReport {
     let catalog = AgentCatalog::load();
+    // Asked **once**, up front, and then handed to both halves and reported
+    // back. Asking again afterwards let a concurrent `probe_agents` invalidate
+    // the shell cache in between: the halves skipped an absent agent against one
+    // answer and the report claimed it against another, so the client recorded
+    // coverage for a config that was never written.
+    let present = present_set(&catalog, request);
     let mut results = Vec::new();
     if request.hooks != HalfAction::Leave {
-        results.extend(sync_hooks(&catalog, request));
+        results.extend(sync_hooks(&catalog, request, &present));
     }
     if request.skills != HalfAction::Leave {
-        results.extend(sync_skills(&catalog, request));
+        results.extend(sync_skills(&catalog, request, &present));
     }
-    results
+    let mut reported: Vec<String> = present.into_iter().collect();
+    reported.sort();
+    InstallReport { results, present: reported }
+}
+
+/// Which catalog agents this box has, by id, for one install.
+fn present_set(catalog: &AgentCatalog, request: &InstallRequest) -> HashSet<String> {
+    catalog
+        .all
+        .iter()
+        .filter(|agent| is_present(agent, &request.commands))
+        .map(|agent| agent.id.clone())
+        .collect()
 }
 
 fn selected<'a>(catalog: &'a AgentCatalog, request: &InstallRequest) -> Vec<&'a AgentDefinition> {
@@ -280,7 +357,9 @@ fn selected<'a>(catalog: &'a AgentCatalog, request: &InstallRequest) -> Vec<&'a 
 
 // MARK: - Hooks
 
-fn sync_hooks(catalog: &AgentCatalog, request: &InstallRequest) -> Vec<InstallResult> {
+fn sync_hooks(
+    catalog: &AgentCatalog, request: &InstallRequest, present: &HashSet<String>
+) -> Vec<InstallResult> {
     if request.hooks != HalfAction::Install {
         // Sweep everything termio has ever installed, bundled declarations
         // included, so a shipped hook a user override removed or redirected is
@@ -308,6 +387,14 @@ fn sync_hooks(catalog: &AgentCatalog, request: &InstallRequest) -> Vec<InstallRe
         .into_iter()
         .filter_map(|agent| {
             let spec = agent.hooks.as_ref()?;
+            // The same rule the skill half has always followed: a hook is a
+            // line merged into the agent's own config file, so writing one for
+            // an agent that is not here leaves a file nothing on this box reads
+            // — on a fresh machine, one per agent on the list.
+            // Re-checked on every sync, so an agent installed later is picked up.
+            if !present.contains(&agent.id) {
+                return None;
+            }
             Some(install_hooks(agent, spec, request))
         })
         .collect()
@@ -1147,7 +1234,9 @@ fn trim_newlines(text: &str) -> String {
 
 // MARK: - Skills
 
-fn sync_skills(catalog: &AgentCatalog, request: &InstallRequest) -> Vec<InstallResult> {
+fn sync_skills(
+    catalog: &AgentCatalog, request: &InstallRequest, present: &HashSet<String>
+) -> Vec<InstallResult> {
     if request.skills != HalfAction::Install {
         // Every skills directory termio has ever installed into — bundled
         // declarations plus the live catalog — so a shipped dir a user override
@@ -1182,12 +1271,7 @@ fn sync_skills(catalog: &AgentCatalog, request: &InstallRequest) -> Vec<InstallR
             let directory = agent.skill_dir.as_deref()?;
             // Install only for agents whose CLI is actually here, so a box
             // without Cursor never grows a `~/.cursor/skills` it cannot use.
-            // Re-checked on every sync, so an agent installed later is picked up.
-            let present = match agent.command.as_deref() {
-                Some(command) => machine::is_command_installed(command),
-                None => true,
-            };
-            if !present {
+            if !present.contains(&agent.id) {
                 return None;
             }
             let path = match resolved(agent, &format!("{directory}/termio/SKILL.md")) {
@@ -1335,6 +1419,7 @@ pub(super) mod tests {
             HalfAction::Install,
             reporter,
             "9.9.9".into(),
+            HashMap::new(),
         );
         request.binary = binary.to_string();
         request
@@ -1350,6 +1435,100 @@ pub(super) mod tests {
             .expect("resolves")
             .hooks
             .expect("has hooks")
+    }
+
+    fn definition_of(json: &str) -> AgentDefinition {
+        AgentManifest::parse(json.as_bytes())
+            .expect("parses")
+            .definition()
+            .expect("resolves")
+    }
+
+    /// The rule both halves of the install now share. Writing a hook for an
+    /// agent that is not on the box leaves a config file nothing there reads —
+    /// on a fresh machine with no agent at all, one per agent on the list. The
+    /// skill half has always refused to; this is the hook half proving it does.
+    #[test]
+    fn a_hook_is_written_only_for_an_agent_that_is_actually_here() {
+        let directory = std::env::temp_dir().join(format!(
+            "termiod-hook-presence-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("temp dir");
+        let here = directory.join("here.json");
+        let gone = directory.join("gone.json");
+
+        // Absolute hook paths, so this asserts on the temp directory and never
+        // touches the home of whoever runs the tests.
+        let manifest = |id: &str, command: &str, file: &std::path::Path| {
+            format!(
+                r#"{{"id":"{id}","name":"{id}","command":"{command}",
+                    "hooks":{{"type":"json","file":"{}","dialect":"claude",
+                    "tool":"tool_name","events":[{{"on":"Stop","state":"done"}}]}}}}"#,
+                file.display()
+            )
+        };
+        let catalog = AgentCatalog {
+            all: vec![
+                definition_of(&manifest("here", "/bin/sh", &here)),
+                definition_of(&manifest("gone", "/nonexistent/agent-cli", &gone)),
+            ],
+            bundled: Vec::new(),
+        };
+
+        let request = local_request("/usr/local/bin/termio");
+        let results = sync_hooks(&catalog, &request, &present_set(&catalog, &request));
+
+        assert!(here.exists(), "the agent that is here should have been wired");
+        assert!(!gone.exists(), "an absent agent must not grow a config");
+        assert_eq!(results.len(), 1, "and it is not reported as an agent we touched");
+        assert_eq!(results[0].id, "here");
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    /// The other half of the rule. Presence is judged against the command the
+    /// client says this agent launches with — Settings lets the user point an
+    /// agent at a path that is not on `PATH` at all, and judging that one by the
+    /// manifest's bare command refuses to write a config for a CLI the app has
+    /// just reported available.
+    #[test]
+    fn an_authored_path_decides_presence_over_the_manifest() {
+        let directory = std::env::temp_dir().join(format!(
+            "termiod-hook-authored-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        std::fs::create_dir_all(&directory).expect("temp dir");
+        let wired = directory.join("wired.json");
+
+        let json = format!(
+            r#"{{"id":"authored","name":"authored","command":"/nonexistent/agent-cli",
+                "hooks":{{"type":"json","file":"{}","dialect":"claude",
+                "tool":"tool_name","events":[{{"on":"Stop","state":"done"}}]}}}}"#,
+            wired.display()
+        );
+        let catalog = AgentCatalog { all: vec![definition_of(&json)], bundled: Vec::new() };
+
+        // Without the authored command this agent is absent, and nothing is
+        // written — the case the previous test covers.
+        let mut request = local_request("/usr/local/bin/termio");
+        assert!(sync_hooks(&catalog, &request, &present_set(&catalog, &request)).is_empty());
+        assert!(!wired.exists());
+
+        // With it, the same agent is here and gets its hooks. Arguments ride
+        // along on a real command line, so the binary is the first word.
+        // Quoted, because a path typed by hand is exactly where spaces turn up,
+        // and arguments ride along on a real command line.
+        request
+            .commands
+            .insert("authored".into(), "\"/bin/sh\" --dangerously-skip".into());
+        let results = sync_hooks(&catalog, &request, &present_set(&catalog, &request));
+
+        assert_eq!(results.len(), 1, "the authored path is what decides");
+        let written = std::fs::read_to_string(&wired).expect("written");
+        assert!(written.contains("termio"), "and the hook actually landed in it");
+        let _ = std::fs::remove_dir_all(&directory);
     }
 
     fn spec(json: &str) -> HookSpec {

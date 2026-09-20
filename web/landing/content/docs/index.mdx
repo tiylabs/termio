@@ -41,6 +41,38 @@ they would from a plain terminal.
 
 Termio is **free to use** — no account, no license keys, no payment backend.
 
+## Pick your path
+
+Most people arrive here for one of three reasons. Start where you actually are:
+
+<Cards>
+  <Card href="/docs/first-session" title="I just want to run an agent">
+    Install, open a project, start Claude Code or Codex in a real terminal, and
+    split the window. Ten minutes, no concepts required.
+  </Card>
+  <Card href="/docs/agents" title="I'm already running several at once">
+    The part that pays off: live status per session, worktrees to keep two
+    agents out of each other's files, and the sidebar as a fleet dashboard.
+  </Card>
+  <Card href="/docs/devices" title="My code lives on another box">
+    A VPS, a Mac mini, a devbox. Termio copies one binary there over your own
+    SSH config and the sessions run on that machine, attached or not.
+  </Card>
+</Cards>
+
+## Or let an agent read the docs for you
+
+You already have a coding agent. These docs are published in a form it can read
+directly, so you can hand it the setup instead of doing it yourself:
+
+```text
+Read https://termio.sh/llms.txt and then help me set up Termio for my project.
+```
+
+Every page also answers with plain Markdown at its own URL, and
+[llms-full.txt](https://termio.sh/llms-full.txt) is the whole set in one file —
+so an agent can answer from the docs rather than improvising.
+
 ## Start here
 
 <Cards>
@@ -56,10 +88,13 @@ Termio is **free to use** — no account, no license keys, no payment backend.
   <Card href="/docs/devices" title="Devices">
     Put a workspace on another box and set up the session host there.
   </Card>
+  <Card href="/docs/persistence" title="What survives">
+    Close, quit, update, reboot — exactly what happens to a running agent.
+  </Card>
   <Card href="/docs/session-control" title="Orchestration & the CLI">
     Let agents spawn, drive, and supervise each other with `termio sessions`.
   </Card>
-  <Card href="/docs/iphone" title="The iPhone companion">
+  <Card href="/docs/iphone" title="The iOS app">
     Pair your phone and check in on a running agent from anywhere.
   </Card>
 </Cards>

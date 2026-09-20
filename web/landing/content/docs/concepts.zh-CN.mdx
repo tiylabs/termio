@@ -3,8 +3,8 @@ title: 核心概念
 description: Termio 由这几个名词构成——设备、工作区、项目、会话、窗格、worktree——再加上一套状态模型，告诉你哪个 Agent 需要你。
 x-i18n:
   source_path: concepts.mdx
-  source_hash: 9ddc9bd90e145b6c88f580813095f57eadadd987f272195178420a86f86dd2a7
-  generated_at: 2026-08-30
+  source_hash: 934a30aa19567219208309ae39b0f1c8fa44a80879adf0147a7332bc54e3627d
+  generated_at: 2026-09-19
 ---
 
 Termio 是一个用来同时运行多个编程 Agent 的终端。应用里的一切都由六个名词和一套状态
@@ -46,6 +46,7 @@ Termio 是一个用来同时运行多个编程 Agent 的终端。应用里的一
 - **会话属于它那台设备，不属于应用。** 每个会话——包括本机上的——都跑在 Termio server
   `termiod` 里，应用只是一个附着上去的查看器。关掉窗口，Agent 继续干活；SSH 断了，
   也只是把你分离，不会杀掉任何东西。只有**关闭会话**才是有意结束一个会话。
+  [什么会留下来](/zh-CN/docs/persistence)是完整的那张表。
 - **会话是可寻址的。** 每个会话都有稳定的 URL，`termio://session/<uuid>`；菜单栏
   托盘、通知，以及 `termio` 命令行工具，靠它把某个会话带到最前面。
 

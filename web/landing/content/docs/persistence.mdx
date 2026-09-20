@@ -1,0 +1,164 @@
+---
+title: What survives
+description: Sessions belong to the machine, not to the window — so closing, quitting, updating, and losing a connection all detach instead of killing. Here is exactly what survives each one, and what it costs when a process really does go away.
+---
+
+Termio’s one structural promise is that a session outlives the thing you were
+looking at it through. Close the window, quit the app, let it update itself,
+drop the SSH link to a VPS — the agent keeps working. This page is the honest
+version of that claim: what survives each event, what doesn’t, and what it costs
+when a process really does go away.
+
+## The rule
+
+Every session runs inside `termiod`, the [Termio server](/docs/server), on the
+machine that owns it — including the ones on this Mac. The app, the CLI, and the
+iOS app are all *viewers*. A viewer attaches to a session and detaches
+from it; it never holds the process.
+
+So the question “does this kill my agent?” always reduces to one thing: **did
+the process die, or did a viewer just let go?** Only two things end a session on
+purpose — **Close Session** (`⌘W`), and the process exiting by itself.
+
+## What survives what
+
+| What happens | Agent keeps running | Layout comes back | Screen comes back | Conversation continues |
+| --- | --- | --- | --- | --- |
+| Switch sessions, hide the window, use another app | Yes | — | Yes | Yes |
+| Close the window | Yes | Yes | Yes | Yes |
+| Quit Termio (`⌘Q`) and relaunch | Yes | Yes | Yes | Yes |
+| Termio updates itself | Yes | Yes | Yes | Yes |
+| The SSH link to a remote machine drops | Yes | Yes | Yes | Yes |
+| `termiod handoff` (server updates in place) | Yes | Yes | Yes | Yes |
+| The server stops, or the machine reboots | No | Yes | No | On this Mac, where the agent supports [resume](/docs/atp#resume). Never on another machine |
+| **Close Session** (`⌘W`) | No | — | — | — |
+
+The top six rows are one event under six names: a viewer went away and the
+process didn’t notice. Reattaching repaints the screen from the
+server’s own scrollback, so you come back to the output you’d have seen if you
+had never left.
+
+<Callout type="note">
+  “Layout comes back” means the sidebar tree, the split groups, and the
+  inspector tab you left each workspace on. That structure is what Termio writes
+  to disk; your terminals’ contents are not part of it.
+</Callout>
+
+## Detaching is the default
+
+Nothing casual ends a session. Closing the window, quitting the app, a self-update,
+a laptop that lost Wi-Fi mid-`ssh` — every one of them detaches. The next launch
+reattaches to the sessions that are still there rather than starting new ones,
+which is why a long agent run is safe to walk away from.
+
+Ending a session is the deliberate act: `⌘W` **closes the focused session**, the
+way `⌘W` closes a browser tab, and its pane collapses with it. Once no session is
+left, `⌘W` closes the window and the app keeps running with everything else alive.
+See [Keyboard shortcuts](/docs/keyboard#panes).
+
+<Callout type="tip">
+  Want to leave a machine but keep the work? Just quit. There is no “detach”
+  command to remember, because detaching is what quitting already does.
+</Callout>
+
+## When the process really does go away
+
+A server that stops — a reboot, a `termiod stop`, a box that lost power — takes
+its PTYs with it. There is no way around that; a process is a process. What
+Termio does is make coming back cheap:
+
+- **The tree is restored.** Projects, worktrees, workspaces, split groups, and the
+  session you left each workspace on all come back, because they live in a file
+  rather than in the daemon.
+- **Sessions restart in their own directory.** A shell comes back as a shell,
+  rooted where it was.
+- **Agents on this Mac that can resume, do.** Reopening a session relaunches the
+  agent into the *same conversation* rather than a blank one.
+
+Resume is **exact-or-nothing**: Termio either continues the precise conversation a
+session was bound to, or it starts fresh. It never guesses at a nearby one. Which
+agents can do this is a fact about each agent’s own CLI, declared in its
+[manifest](/docs/atp#resume) — see the resume column in
+[Running multiple agents](/docs/agents#what-each-agent-reports).
+
+## Surviving a reboot
+
+Without a service, the server lives as long as your login session. That is usually
+fine on the Mac in front of you and almost never fine on a box you only ever reach
+over SSH, where nobody logs in interactively at all.
+
+```bash
+termiod service install    # launchd on macOS, systemd --user on Linux
+termiod service status
+```
+
+With a service installed the server is brought back after a crash, and started
+again at login after a reboot. On Linux, surviving your logout also needs
+lingering enabled for the user (`loginctl enable-linger`); without it the unit
+stops with your session.
+
+Be clear about what this buys: the *server* comes back, not the processes it was
+holding. A reboot still ends every PTY on that machine. A service is what stops
+“nothing is listening on that box” from being a permanent state — see
+[Troubleshooting](/docs/troubleshooting).
+
+## Sleep
+
+A sleeping machine isn’t running anything, so the honest rule for a laptop is:
+sessions don’t die when the Mac sleeps, they pause with it and pick up when it
+wakes.
+
+Termio does hold the machine out of *idle* sleep while there is work worth
+protecting. While any session is working or waiting on you, the server renews a
+short `caffeinate` lease, so a Mac plugged into power stays reachable for the
+agent that went quiet on a permission prompt — exactly the moment your phone
+needs to answer it. On battery it takes no lease at all, and closing the lid
+sleeps the machine regardless: nothing in user space can override clamshell
+sleep.
+
+<Callout type="warning">
+  If you want a session you can always reach, run it on a machine that stays
+  up — a VPS, or the Mac mini on the desk — and pair your
+  [iPhone](/docs/iphone) against that rather than against a laptop.
+</Callout>
+
+## Updating without dropping sessions
+
+A new server build replaces the running one **in place**: the process keeps its
+id and its PTYs, and the sessions never notice.
+
+```bash
+termiod handoff
+```
+
+That is also what happens when the app updates itself, which is why a Termio
+update doesn’t cost you your running agents. A machine being set up or updated
+from **Settings ▸ Remote Hosts** takes the same path, and an update that *would*
+interrupt work in progress says so and names the session first.
+
+## What Termio does not keep
+
+Being clear about the edges is part of the promise:
+
+- **Termio keeps no transcript of your terminals.** Scrollback lives in the
+  server for the session’s lifetime and goes away with it; nothing durable is
+  written. The one exception is a handoff, which passes each session’s replay
+  buffer to the incoming server through a temporary file it unlinks as it
+  goes — in flight for the length of an update, never a stored record.
+- **An agent’s conversation belongs to the agent.** Resume works by handing the
+  agent back its own session id; the conversation is in the agent’s store, under
+  your own account, exactly as it would be from a plain terminal.
+- **Nothing syncs anywhere.** State is per machine, on that machine. There is no
+  Termio cloud holding a copy — see [Devices](/docs/devices).
+
+<Cards>
+  <Card href="/docs/server" title="The Termio server">
+    What `termiod` is, how it gets onto a machine, and how to look at it.
+  </Card>
+  <Card href="/docs/atp" title="Agent Terminal Protocol">
+    The manifest that declares how an agent launches, reports, and resumes.
+  </Card>
+  <Card href="/docs/troubleshooting" title="Troubleshooting">
+    Sessions missing after a reboot, and the rest of the usual surprises.
+  </Card>
+</Cards>

@@ -18,11 +18,17 @@ struct InstallOutcome {
     /// machine answered, even if it refused every agent.
     var failure: String?
 
+    /// The agents that machine had while it installed, by id — its own answer,
+    /// not a guess made from a separate probe at a different moment. `nil` from
+    /// a daemon too old to report it, which means *unknown* and never "none".
+    var coveredIDs: [String]?
+
     var isEmpty: Bool { succeeded.isEmpty && failed.isEmpty }
 
     mutating func record(_ name: String, installed: Bool) {
         if installed { succeeded.append(name) } else { failed.append(name) }
     }
+
 
     /// A human list of target names: spelled out up to three ("Claude Code, Codex
     /// and Cursor"), counted beyond that ("6 agents") so a confirmation line stays

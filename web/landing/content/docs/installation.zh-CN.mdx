@@ -3,8 +3,8 @@ title: 安装
 description: 下载 macOS 版 Termio，拖进「应用程序」，之后交给 Sparkle 自动更新——无需账号，也没有许可证密钥。
 x-i18n:
   source_path: installation.mdx
-  source_hash: 0c812fe31113088b43005c67aba6c4dc82a11669ca5b2ca1cfcc3a1df55cda63
-  generated_at: 2026-09-17
+  source_hash: 563c733e396d13e634c70b6cdce65fe168be039fc268e201094e359900a70be3
+  generated_at: 2026-09-19
 ---
 
 Termio 用同一个下载包同时运行在 Apple 芯片和 Intel 的 Mac 上。安装就是普通的拖进「应用程序」——不用注册账号，
@@ -14,6 +14,15 @@ Termio 用同一个下载包同时运行在 Apple 芯片和 Intel 的 Mac 上。
   Termio 需要 macOS 14 或更高版本，Apple 芯片和 Intel 的 Mac 都可以。它托管你已经
   装好的 Agent 命令行工具，本身不打包它们。
 </Callout>
+
+## 你需要什么
+
+| | |
+| --- | --- |
+| **macOS** | 14（Sonoma）或更高版本，Apple 芯片和 Intel 都可以——同一个通用下载包 |
+| **账号** | 不需要。没有登录、没有许可证密钥，也没有支付后端 |
+| **Agent 命令行工具** | 你本来在用的那些，`claude`、`codex` 之类。Termio 托管它们，不附带它们 |
+| **想用另一台机器** | 任何你已经能 `ssh` 上去的机器。Termio 读你的 `~/.ssh/config`，不以 root 身份装任何东西 |
 
 ## 下载并安装
 
@@ -28,6 +37,19 @@ Termio 用同一个下载包同时运行在 Apple 芯片和 Intel 的 Mac 上。
   width={1544}
   height={1024}
 />
+
+## 确认装好了
+
+启动 Termio，你应该会看到欢迎界面，**打开项目**是那个主按钮。整个安装就到这儿——没有设置
+向导，没有账号步骤，第一个会话之前也没有什么要配置的。
+
+首次启动时，Termio 会问你一次要不要让 Agent 互相协作——也就是**会话控制**，它会装一个小
+技能，教它们 `termio sessions` 这些命令。**Agent 实时状态**（侧栏状态点背后的那些 hooks）
+是同一个标签页上另一个开关；当侧栏看到有 Agent 在跑时会提示你打开。两个都是可选的，也都
+可以关掉；参见[状态 hooks 与会话控制](/zh-CN/docs/session-control)。
+
+如果你本来就在用 [Ghostty](https://ghostty.org)，那就没什么要挑的：Termio 会在首次启动时
+读你的 `~/.config/ghostty/config`，用你在那里选好的字体和主题开始。
 
 ## 用 Homebrew 安装
 
@@ -62,6 +84,33 @@ Termio 附带一个小巧的命令行工具。打开 **设置 ▸ Termio server*
 `termio` 软链到你的 `PATH` 上。之后在任意目录执行 `termio` 就会把它作为项目打开，
 而 `termio sessions …` 让你的 Agent 彼此协作。这完全是可选的——参见
 [会话控制与命令行](/zh-CN/docs/session-control)。
+
+## Termio 把东西放在哪儿
+
+没有什么是藏着的，也没有什么放在我们的服务器上：
+
+| 路径 | 里面是什么 |
+| --- | --- |
+| `~/.termio/` | 你的配置：`keybindings.json`、`config/agents/` 下的自定义 Agent 清单，以及 `chats/` 草稿目录 |
+| `~/Library/Application Support/termio/` | 应用状态和你的 `Themes/` 文件夹 |
+| `~/.local/bin/` | 你通过 SSH 设置过的机器上的 Termio server——`termiod`，Linux 上还有 `termio`。本机上它随应用包一起发布，从不装到这里 |
+| 每个 Agent 自己的配置 | Termio 的状态 hooks 和它的 `termio` 技能，按 Agent 写入 |
+
+## 卸载
+
+退出 Termio，把它拖进废纸篓。想清掉它写在应用包外面的东西，先在**设置 ▸ Agent** 里关掉
+**Agent 实时状态**和**会话控制**——这两个开关会移除它们装在**本机**上的 hooks 和技能，而
+你自己写的那些原封不动。然后如果你也想让状态消失，删掉 `~/.termio` 和
+`~/Library/Application Support/termio`。
+
+其他每一台机器上装过的东西都会留在那儿，直到你去那边清理。先把 server 停掉，因为只卸载
+服务会留下一个由别的途径启动的 daemon 还在跑：
+
+```bash
+termiod stop
+termiod service uninstall
+rm -f ~/.local/bin/termiod ~/.local/bin/termio
+```
 
 ## 下一步
 

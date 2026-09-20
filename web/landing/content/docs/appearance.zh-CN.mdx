@@ -3,8 +3,8 @@ title: 外观
 description: 设置终端主题与字体、调整光标和窗口，并找到 Termio 其余的设置项——全都在一个熟悉的 macOS 设置窗口里。
 x-i18n:
   source_path: appearance.mdx
-  source_hash: b76fdb2fe9ff814ed15cc83e98afc8595068998032780a519c21d5733e667af5
-  generated_at: 2026-08-30
+  source_hash: 961f2be1158bbfa1b56806d5663c4057890b28086a5f53d6827cdb3a625b37d0
+  generated_at: 2026-09-19
 ---
 
 用 `⌘,` 打开 **设置**。这是一个标准的 macOS 设置窗口，左侧一列标签页；**外观** 就是
@@ -72,22 +72,26 @@ Rose Pine、Solarized 等等——每一款都挑得住一整天的阅读，而�
 
 其他标签页覆盖应用的剩余部分：
 
-- **通用** —— 语言、任务通知、检查器 Issues 面板背后的 GitHub 集成，以及一个用于匿名
-  每日使用统计的隐私开关。
+- **通用** —— 语言、检查器 Issues 面板背后的 GitHub 集成，以及一个用于匿名每日使用统计
+  的隐私开关。
 - **终端** —— 回滚历史与文本选择。
-- **设备** —— 本机以及你从这儿能连上的每一台机器，一台一行，点进去是它的连接方式和
+- **Termio server** —— 本机自己的 Termio server，以及 `termio`
+  [命令行工具](/zh-CN/docs/cli)的开关。见 [Termio server](/zh-CN/docs/server)。
+- **远程主机** —— 你从这儿能连上的每一台机器，一台一行，点进去是它的连接方式和
   Termio 在它上面装了什么。见 [设备](/zh-CN/docs/devices)。
 - **工作区** —— 每个工作区连同它所在的设备，也是重命名和移除工作区的地方。见
   [工作区](/zh-CN/docs/workspaces)。
 - **键盘** —— 重新绑定任意快捷键；参见 [键盘快捷键](/zh-CN/docs/keyboard)。
 - **Agent** —— 添加 Agent、启用它们，并打开
-  [会话控制](/zh-CN/docs/session-control)。这个页面带设备作用域，因为一个 Agent 的命令行
-  工具装在哪儿，是关于某一台机器的事实。
+  [会话控制](/zh-CN/docs/session-control)，以及设置任务完成通知。按设备不同的那些值——
+  CLI 装在哪儿、在不在——会在这个 Agent 自己的页面上每台设备一行地列出来，而不是藏在一个
+  选择器后面。
 - **用量** —— 你已登录的 Agent（Claude Code、Codex）的 token 用量。Termio 复用各个命令行
   工具自己的凭据，告诉你离额度还有多远；它本身不存任何东西。
 - **手机** —— 把 iPhone 和某台机器配对，并发布一个它能连上的地址。见
-  [iPhone 伴侣应用](/zh-CN/docs/iphone)。
+  [iOS 应用](/zh-CN/docs/iphone)。
 - **社区** —— 在哪里找到这个项目：GitHub、Discord 和微信群。
 
-会因设备而异的设置，会在页面顶部写明它指的是哪台机器。你在那儿改的，就是那台机器拿到
-的。
+设备是一行一行列出来的，从来不是一个选择器。一个按设备不同的设置，会在它该在的地方每台
+设备一行地列出来——命令路径就在那个 Agent 自己的页面上——而一台设备的完整情况是靠导航到达
+的：本机用 **Termio server**，其他设备用**远程主机**下的一行。
