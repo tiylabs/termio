@@ -17,6 +17,22 @@ export type ChangelogEntry = {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: "0.53.5",
+    date: "2026-09-19",
+    title: "The input method's candidate window stays off what you're typing",
+    changes: {
+      improved: [
+        "Setting a machine up is putting the server and the hooks on it, and reaching the box is the only thing that can stop it. A machine with no agent CLI now says so in its own line instead of failing setup, and an agent you install afterwards is noticed.",
+      ],
+      fixed: [
+        "Typing Chinese, Japanese, or Korean no longer puts the input method's candidate window on top of the characters you are typing.",
+        "Hooks are written only for the agents that are on the machine, instead of for every agent in the catalog.",
+        "Copying a file in Finder and pasting it into a terminal now gives its full path, not just its name.",
+        "An image file copied on the Mac now reaches a session running on another machine.",
+      ],
+    },
+  },
+  {
     version: "0.53.4",
     date: "2026-09-18",
     title: "A session that loses its connection comes back on its own",

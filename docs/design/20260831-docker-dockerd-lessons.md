@@ -3,7 +3,7 @@ title: What ten years of docker/dockerd teach the termio/termiod split
 status: active
 type: rfc
 created: 2026-08-31
-updated: 2026-08-31
+updated: 2026-09-09
 related:
   - 20260730-termiod-session-protocol.md
   - 20260819-unify-server-plane.md
@@ -101,7 +101,7 @@ map this RFC proposes:
 | --- | --- | --- |
 | `termio sessions …`, `open`, `notify`, `agent report` | stays `termio` | contract frozen; see §4 for which socket serves it when |
 | `termiod remote …` and top-level `--host` twins | `termio remote …`, one spelling | the duplicate top-level forms retire with a deprecation notice, not silently |
-| `termiod create/list/kill/send/attach/watch/status/logs` | `termio …` on machines that have the client; unchanged as `termiod …` when invoked on the box over SSH | see §1.2 |
+| `termiod create/list/kill/send/attach/watch/status/logs` | `termio …` everywhere — boxes get the client too (§1.2, amended 2026-09-09); the `termiod` spellings keep working | see §1.2 |
 | `termiod pair/serve/service/deploy` | stays `termiod` | operator plumbing for the box itself |
 | `termiod stop` | stays `termiod`, on-box only | stops the daemon under it; destructive enough that it should require being on the box, like `systemctl stop` |
 | `termiod handoff`, `termiod stdio`, `termiod set-status` | stays `termiod`, frozen | machine-invoked: the upgrade path, the SSH exec target (its name is in the wire path), and the hook target (hooks exec it by absolute path) |
@@ -109,15 +109,41 @@ map this RFC proposes:
 
 ### 1.2 Where each command exists
 
-DEPLOY.md teaches people to run `~/.local/bin/termiod …` on the VPS,
-because on the VPS that is all there is: the reconcile loop installs the
-daemon binary and nothing else. `termio remote open ukvps` is a command
-for machines that have the client; it does not replace the on-box
-spellings, and DEPLOY.md keeps teaching `termiod` for commands an SSH
-user runs on the host itself. The docs change in P1 is scoped to the
-Mac-side examples only. Whether the client binary ever gets installed on
-Linux boxes is the standalone-topology question (§7, curl installer) and
-is out of scope here.
+Amended 2026-09-09; the original scoping and the evidence against it are
+recorded in §9. Tracked as issue #628.
+
+The client ships everywhere the daemon does. The reconcile loop installs
+`termio` beside `termiod` in the same pass, with the same
+copy-beside-rename-over discipline, so a box's client and daemon are the
+same build and skew between them is structurally impossible — §3's
+lesson satisfied for free on boxes. The cost is roughly double the
+copied payload per deploy; the alternative — a person typing `termio`
+into a box session and reading `command not found` — was priced by
+watching it happen.
+
+PATH is the daemon's problem, not the dotfiles'. termiod already injects
+`TERMIOD_SESSION_ID` into the sessions it spawns; it additionally
+prepends its own binary's directory to those sessions' PATH. Every
+terminal opened through termio finds `termio` with zero host mutation —
+the same principle as never overriding `~/.ssh/config`. A bare SSH login
+outside termio keeps whatever the box's `~/.profile` does; that is not
+our session, and DEPLOY.md keeps teaching the full
+`~/.local/bin/termiod` path for repairs made over plain SSH.
+
+On a box, `termio` speaks the framed protocol to the local daemon
+socket — §4's single-API policy applied to our own client. Session verbs
+(`sessions …`, `version`, `agent report`) route to the local channel;
+`agent report` already straddles, exec'ing `termiod set-status` when
+`TERMIOD_SESSION_ID` is present. App-plane verbs (`open`, `notify`,
+`focus`) have no daemon meaning and fail with one line naming the
+reason — no app on this host — rather than pretending.
+
+Hooks are untouched: they keep exec'ing `termiod` by absolute path, the
+frozen machine contract in §1.1. `termiod pair/serve/handoff/stop` stay
+daemon-spelled operator plumbing, exactly like `dockerd`. The curl
+installer stays deferred (§7): the Mac's reconcile loop reaches every
+box the user has, so no second install path exists and the single-writer
+invariant holds.
 
 ### 1.3 Mechanics, costed honestly
 
@@ -386,8 +412,9 @@ contradict §4.1. The lesson is to keep the runtime core extractable:
 - A curl installer: separate discussion, gated on a topology (phone to
   box without a Mac) that doesn't exist yet. When it comes, the script
   fetches a binary and execs `termiod service install`, so the reconcile
-  loop stays the single writer. It is also the point at which §1.2's
-  "client on a Linux box" question reopens.
+  loop stays the single writer. (§1.2's client-on-a-box question no
+  longer waits on it — the 2026-09-09 amendment ships the client through
+  the reconcile loop.)
 - A single merged binary: rejected in server-plane §7.8 for path and
   dispatch reasons that this RFC's two-binary shape avoids. Not
   re-proposed.
@@ -410,6 +437,7 @@ ahead of a stage that RFC already gates.
 | 5 | Core-vs-planes import discipline (§6) + single-API policy with its named exceptions (§4) | review discipline | standing, from now |
 | 6 | P2 Rust `termio` client: lib extraction, argv[0] channels, frozen contracts (§1.3) | the real port | **started 2026-08-31** — Stage 10 pulled forward after the one-backend gate was met early (unify-server-plane, restamp of that date); its gates unchanged |
 | 7 | §5.2 scoped token tier | protocol + daemon + tests | when a non-owner token holder exists; not scheduled |
+| 8 | §1.2 amendment: client in the deploy payload + reconcile verification, daemon-injected PATH for spawned sessions, box-side routing to the local channel, DEPLOY.md flip | deploy + dispatcher; the routing rides Stage 10's verb ladder | issue #628 |
 
 ---
 
@@ -461,3 +489,13 @@ against-the-tree standard in four places, each now fixed in the body:
 Round 2 also confirmed P1 is not shippable without a bundled-daemon
 locator (the script's only daemon lookup can select a different
 channel's daemon); §1.4 makes the locator P1's first deliverable.
+
+**Amendment 2026-09-09 — §1.2 reversed on the box client.** The original
+§1.2 deferred "client on a Linux box" to the curl-installer topology
+(§7). The deferral did not survive contact with use: the
+box-with-an-agent topology already exists, and a person typed `termio`
+into a VPS session — the Mac-side docs and skills train exactly that
+muscle memory — and read `command not found`. §1.2 now ships the client
+through the reconcile loop with daemon-injected PATH for spawned
+sessions, §7's installer bullet no longer gates it, and §8 row 8 tracks
+the work as issue #628.
